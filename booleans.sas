@@ -153,3 +153,76 @@
     %let condition = %eval(&pos + &is_numeric);
     %ifelse(&condition = 2, 1, 0)
 %mend is_positive;
+
+
+/**
+ * ===================
+ * # is_missing_number
+ * ===================
+ * Returns true if the value is a number that is missing. False otherwise.
+ *
+ * @param value - the value to test.
+ * @returns boolean - 1 if the value is a missing number, 0 otherwise.
+*/
+%macro is_missing_number(value);
+    %local pos is_numeric condition;
+    %let is_numeric = %is_numeric(&value);
+    %let missing = %eval(&value = .);
+    %let condition = %eval(&missing + &is_numeric);
+    %ifelse(&condition = 2, 1, 0)
+%mend is_positive;
+
+/**
+ * ===================
+ * # is_missing_string
+ * ===================
+ * Returns true if the value is a string that is missing. False otherwise.
+ *
+ * @param value - the value to test.
+ * @returns boolean - 1 if the value is a missing string, 0 otherwise.
+*/
+%macro is_missing_string(value);
+    %local pos is_string condition;
+    %let is_string = %is_string(&value.);
+    %let missing = %eval(&value. = "");
+    %let condition = %eval(&missing + &is_string);
+    %ifelse(&condition = 2, 1, 0)
+%mend is_missing_string;
+
+/**
+ * =====================
+ * # is_missing_temporal
+ * =====================
+ * Returns true if the value is temporal and missing. False otherwise.
+ *
+ * @param value - the value to test.
+ * @returns boolean - 1 if the value is a missing temporal value, 0 otherwise.
+*/
+%macro is_missing_temporal(value);
+    %local pos is_temporal condition;
+    %let is_temporal = %is_temporal(&value.);
+    %let missing = %eval(&value. = .);
+    %let condition = %eval(&missing + &is_temporal);
+    %ifelse(&condition = 2, 1, 0)
+%mend is_missing_temporal;
+
+
+/**
+ * ============
+ * # is_missing
+ * ============
+ * Returns true if the value is missing. False otherwise.
+ *
+ * @param value - the value to test.
+ * @returns boolean - 1 if the value is missing, 0 otherwise.
+*/
+%macro is_missing(value);
+    %ifelse(
+        %eval(
+            %is_missing_number(&value) 
+            + %is_missing_string(&value) 
+            + %is_missing_temporal(&value)
+        ) > 0,
+        1, 0
+    )
+%mend is_missing;

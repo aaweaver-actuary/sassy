@@ -11,28 +11,25 @@
 
 	/*	Obtain all cfxmlids from current EV  */
 	proc sql;
-	create table &LOB._pols as select distinct
+	create table &LOB._pols as 
+	select distinct
 		cfxmlid
-		,historical_company
-		,policysymbol
-		,policynumber
-	/*	,statisticalpolicymodulenumber*/
-		,policyeffectivedate format=yymmddd10.
-		,policyexpirationdate format=yymmddd10.
+		,%policy_5_key
 		,imageeffectivedate format=yymmddd10.
 		,imageexpirationdate format=yymmddd10.
-	from Exps_B15.&Rerated_TBL.
-	; quit;
+
+	from Exps_B15.&Rerated_TBL.; 
+	quit;
+
 
 	proc sql;
-
-	create table &LOB._credit_vars as select distinct
+	create table &LOB._credit_vars as 
+	select distinct
 		t1.*
 		,t2.date_of_data_dt format=yymmddd10. 
 
-		/*	BIN hit, Experian (Intelliscore) hit variables */
-		,case when missing(t2.bin) then 0 else 1 end as bin_hit
-		,case when 1 le t2.commercial_intelliscore le 100 then 1 else 0 end as exp_hit
+		,%column_is_not_missing(t2.bin) as bin_hit
+		,%is_between_1_and_100(t2.commercial_intelliscore) as exp_hit
 
 		/*	Raw variables from snapshot */
 		,t2.bin
@@ -50,14 +47,12 @@
 
 		/* Calculated variables */
 
-			/* Positive-value indicators */
-		,case when t2.alltrades > 0 then 1 else 0 end as &LOB._alltrades_positive
-		,case when t2.baltot > 0 then 1 else 0 end as &LOB._baltot_positive
-		,case when t2.numtot_combined > 0 then 1 else 0 end as &LOB._numtot_combined_positive
-		,case when t2.baltot_combined > 0 then 1 else 0 end as &LOB._baltot_combined_positive
+		,%is_column_positive(t2.alltrades) as &LOB._alltrades_positive
+		,%is_column_positive(t2.baltot) as &LOB._baltot_positive
+		,%is_column_positive(t2.numtot_combined) as &LOB._numtot_combined_positive
+		,%is_column_positive(t2.baltot_combined) as &LOB._baltot_combined_positive
 
-			/* Others derived from raw variables */
-		,input(t2.ttc039,8.) / input(t2.ttc038,8.) as pay_sat
+		,%safe_ratio(t2.ttc039, t2.ttc038) as pay_sat
 
 			/* Median-imputed variables */
 			/* 0 means Missing and 1 Available			*/
