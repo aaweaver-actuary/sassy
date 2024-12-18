@@ -3,9 +3,9 @@
 /*                                                                                  */
 /* The %WITH macro emulates CTE-like functionality using the SAS macro              */
 /* language and nested subqueries. It accepts a variable number of                  */
-/* name/SQL pairs followed by a final SQL query that references those                */
+/* name/SQL pairs followed by a final SQL query that references those               */
 /* "named tables." The macro will substitute each named table reference in          */
-/* the final query with its corresponding SQL expression wrapped as a                */
+/* the final query with its corresponding SQL expression wrapped as a               */
 /* subquery. This emulates:                                                         */
 /*                                                                                  */
 /* WITH name1 AS (sql1),                                                            */
@@ -19,32 +19,26 @@
 /* Usage:                                                                           */
 /*                                                                                  */
 /* %with(                                                                           */
-/*   ds1,                                                                           */   
-/*   SELECT id, value1, filter_column FROM ds1,                                      */
-/*                                                                                  */ 
-/*   ds2,                                                                           */   
-/*   SELECT id, value2 FROM ds2,                                                    */
+/*   ds1 := SELECT id, value1, filter_column FROM tbl1 |>                           */
+/*   ds2 := SELECT id, value2 FROM tbl2 |>                                          */
+/*   lkp := SELECT distinct filter_col FROM lkp |>                                  */
+/*   filtered_ds1 := (                                                              */
+/*       SELECT ds1.*                                                               */
+/*       FROM ds1                                                                   */
+/*       WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp)                    */ 
+/*   ) |>                                                                           */
 /*                                                                                  */
-/*   lkp,                                                                           */
-/*   SELECT distinct filter FROM lkp,                                                */
-/*                                                                                  */
-/*   filtered_ds1,                                                                   */
-/*   SELECT ds1.*                                                                   */
-/*   FROM ds1                                                                       */          
-/*   WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp),                         */
-/*                                                                                  */
-/*   final_join,                                                                     */
-/*   (                                                                              */  
+/*   final_join := (                                                                */  
 /*      SELECT                                                                      */
 /*          ds1.value1,                                                             */ 
 /*          ds2.value2                                                              */
 /*                                                                                  */
-/*      FROM filtered_ds1 AS ds1                                                     */
+/*      FROM filtered_ds1 AS ds1                                                    */
 /*      JOIN ds2                                                                    */
 /*          ON ds1.id = ds2.id                                                      */
-/*   ),                                                                             */
+/*   ) |>                                                                           */
 /*                                                                                  */
-/*   SELECT final_join.* FROM final_join                                              */
+/*   SELECT final_join.* FROM final_join                                            */
 /* );                                                                               */
 /*                                                                                  */
 /* After substitution, this would become something like:                            */
@@ -78,161 +72,148 @@
 /************************************************************************************/
 
 
-%macro with/parmbuff;
+%global verbose execute;
+%let verbose=0;
+%let execute=1;
 
-   /* Extract all parameters except the surrounding parentheses */
-   %local allparams;
-   %let allparams=%qsubstr(&syspbuff,2,%length(&syspbuff)-2);
+%macro logger(msg, level=INFO);
+%put [&level.] - &msg.;
+%mend;
 
-   %local count i token finalQuery numPairs;
-   %let i=1;
-   %let token=%scan(&allparams,&i,%,);
-   %do %while(%length(&token) > 0);
-      %let i=%eval(&i+1);
-      %let token=%scan(&allparams,&i,%,);
+%macro with / parmbuff;
+%if %symexist(verbose) %then %do;
+	%if &verbose eq 0 %then %put verbose is turned off;
+	%else %put verbose is turned on;
+%end;
+%else %let verbose=0;
+
+%if verbose=1 %then %logger(Entering initialize_parameters);
+   %initialize_parameters;
+
+%if verbose=1 %then %logger(Entering validate_input_arguments);
+   %validate_input_arguments;
+
+%if verbose=1 %then %logger(Entering parse_parameters_into);
+   %parse_parameters_into_variables;
+
+%if verbose=1 %then %logger(Entering gen_hash_to_id_query);
+   %gen_hash_to_id_query;
+
+%if verbose=1 %then %logger(Entering file_already_exists);
+   %if %file_already_exists %then %return;
+
+%if verbose=1 %then %logger(Entering sub_named_with_subqueries);
+   %sub_named_with_subqueries;
+
+%if verbose=1 %then %logger(Entering save_final_query_to_file);
+   %save_final_query_to_file;
+
+%if verbose=1 %then %logger(Entering execute_final_query);
+   %execute_final_query;
+
+%mend;
+
+%macro initialize_parameters;
+   %global all_params count n_param_pairs hash_file hash final_query;
+   %let all_params = %qsubstr(&syspbuff, 2, %length(&syspbuff) - 2);
+   %let count = 1;
+
+   %do %while(%length(%scan(&all_params, &count, |>,)) > 0);
+      %let count = %eval(&count + 1);
    %end;
-   %let count=%eval(&i-1);
+   %let count = %eval(&count - 1);
+%mend;
 
+%macro validate_input_arguments;
    %if &count < 1 %then %do;
-      %put ERROR: No parameters provided to %WITH macro.;
-      %return;
+      %put ERROR: No parameters provided to %WITH_PREPROCESSOR macro.;
+      %abort;
+   %end;
+   %if %sysfunc(mod(&count, 2)) ne 1 %then %do;
+      %put ERROR: Parameters do not form valid name/definition pairs.;
+      %abort;
+   %end;
+%mend;
+
+%macro parse_parameters_into_variables;
+   %global n_param_pairs final_query;
+   %let n_param_pairs = %eval(&count / 2);
+
+   %local i j;
+   %let j = 1;
+
+   %do i = 1 %to &n_param_pairs;
+      %global name&i sql&i;
+      %let name&i = %qtrim(%qscan(%qscan(&all_params, &j, |>,), 1, :=));
+      %let sql&i = %qtrim(%qscan(%qscan(&all_params, &j, |>,), 2, :=));
+      %let j = %eval(&j + 1);
    %end;
 
-   %if %sysfunc(mod(%eval(&count-1),2)) ne 0 %then %do;
-      %put ERROR: Parameters do not form valid pairs before the final SQL.;
-      %return;
+   %let final_query = %qtrim(%qscan(&all_params, &j, |>,));
+%mend;
+
+%macro gen_hash_to_id_query;
+   filename hash_file temp;
+   data _null_;
+      file hash_file;
+      put "&all_params";
+   run;
+   %global hash;
+   %let hash = %sysfunc(sha256(&hash_file));
+   filename hash_file clear;
+   %global hash_file;
+   %let hash_file = &hash..sas;
+/*   %let hash_file = %sysfunc(pathname(work))/&hash..sas;*/
+%mend;
+
+%macro file_already_exists;
+   %if %sysfunc(fileexist(&hash_file)) %then %do;
+      %put NOTE: Preprocessed query already exists as &hash_file.;
+      %if %symexist(execute) and &execute eq 1 %then %do;
+         %include "&hash_file";
+      %end;
+      %return 1;
    %end;
+   %return 0;
+%mend;
 
-   %let numPairs=%eval((&count-1)/2);
+%macro sub_named_with_subqueries;
+   %local currentQuery tmpQuery i;
+   %let currentQuery = &final_query;
 
-   /* Parse into name/sql pairs and the final query */
-   %local j;
-   %let j=1;
-   %do i=1 %to &numPairs;
-      %local name&i sql&i;
-      %let name&i=%qtrim(%qscan(&allparams,&j,%,));
-      %let j=%eval(&j+1);
-      %let sql&i=%qtrim(%qscan(&allparams,&j,%,));
-      %let j=%eval(&j+1);
-   %end;
-   %let finalQuery=%qtrim(%qscan(&allparams,&j,%,));
-
-   /* 
-      Now we will substitute references from the last defined name to the first.
-      We'll look for patterns of the form:
-         FROM name
-         JOIN name
-         , name
-      as well as references within subqueries like:
-         (SELECT ... FROM name ...)
-      and replace them with:
-         FROM (sql) name
-      etc.
-      
-      We'll try a simple approach:
-      For each name:
-        - Replace occurrences of "FROM name" with "FROM ( sql ) name"
-        - Replace occurrences of "JOIN name" with "JOIN ( sql ) name"
-        - Replace occurrences of ", name" with ", ( sql ) name"
-      
-      This should produce nested subqueries that alias the name with its own name,
-      preserving references like name.column.
-
-      If there's a risk of partial matches (e.g., a table name that appears as a 
-      substring in another word), consider surrounding with spaces or punctuation.
-      We'll add spaces around patterns to reduce the risk of partial matches.
-   */
-
-   %local currentQuery tmpQuery;
-   %let currentQuery=&finalQuery;
-
-   %do i=&numPairs %to 1 %by -1;
-
-      /* We'll do multiple replacements to handle different FROM/JOIN syntax.
-         To ensure we don't miss embedded instances, we might do a few passes.
-         We insert parentheses around the sql to form a subquery and alias it.
-      */
-
+   %do i = &n_param_pairs %to 1 %by -1;
       %local curName curSQL;
-      %let curName=%superq(name&i);
-      %let curSQL=%superq(sql&i);
+      %let curName = %superq(name&i);
+      %let curSQL = %superq(sql&i);
 
-      /* Prepare patterns. We'll try simple TRANWRD patterns: 
-         "FROM curName" -> "FROM (curSQL) curName"
-         "JOIN curName" -> "JOIN (curSQL) curName"
-         ", curName"    -> ", (curSQL) curName"
-         
-         We'll also consider uppercase variants, just in case:
-         We'll rely on case-sensitive. If needed, user can maintain consistent case.
-         For safety, let's do a lowcase replacement technique:
-         But since SAS macro doesn't have easy PRXCHANGE here, 
-         we'll assume user uses consistent case or do multiple TRANWRD calls.
-      */
+      /* Substitute named tables in FROM, JOIN, and comma-separated lists */
+      %let tmpQuery = %qsysfunc(transtrn(&currentQuery, %str(FROM &curName), %str(FROM (&curSQL) &curName)));
+      %let currentQuery = &tmpQuery;
 
-      /* Replace 'FROM curName' */
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(FROM &curName),%str(FROM (&curSQL) &curName)));
-      %let currentQuery=&tmpQuery;
+      %let tmpQuery = %qsysfunc(transtrn(&currentQuery, %str(JOIN &curName), %str(JOIN (&curSQL) &curName)));
+      %let currentQuery = &tmpQuery;
 
-      /* Replace 'JOIN curName' */
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(JOIN &curName),%str(JOIN (&curSQL) &curName)));
-      %let currentQuery=&tmpQuery;
-
-      /* Replace ', curName' */
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(, &curName),%str(, (&curSQL) &curName)));
-      %let currentQuery=&tmpQuery;
-
-      /* There could be cases where the name appears right after 'FROM(' or 'JOIN(' due to formatting.
-         We'll do a bit more robust pattern by also trying variations with parentheses:
-         'FROM(&curName)' -> 'FROM(&curSQL) &curName'
-         'JOIN(&curName)' -> 'JOIN(&curSQL) &curName'
-         This might not be necessary if the user queries are well-formed.
-      */
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(FROM(&curName),),%str(FROM(&curSQL) &curName,)));
-      %let currentQuery=&tmpQuery;
-
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(FROM(&curName) ),%str(FROM(&curSQL) &curName )));
-      %let currentQuery=&tmpQuery;
-
-      %let tmpQuery=%qsysfunc(transtrn(%superq(currentQuery),%str(JOIN(&curName) ),%str(JOIN(&curSQL) &curName )));
-      %let currentQuery=&tmpQuery;
-
-      /* Potentially more patterns could be handled, but this should suffice 
-         for common SQL syntax patterns.
-      */
-
+      %let tmpQuery = %qsysfunc(transtrn(&currentQuery, %str(, &curName), %str(, (&curSQL) &curName)));
+      %let currentQuery = &tmpQuery;
    %end;
 
-   %put NOTE: Final expanded query:;
-   %put &currentQuery;
+   %global expandedQuery;
+   %let expandedQuery = &currentQuery;
+%mend;
 
-   /* 
-      To run this query:
-      proc sql;
-         &currentQuery;
-      quit;
-   */
+%macro save_final_query_to_file;
+   filename outFile "&hash_file";
+   data _null_;
+      file outFile;
+      put "proc sql;";
+      put "&expandedQuery;";
+      put "quit;";
+   run;
+   %put NOTE: Preprocessed query saved to &hash_file.;
+%mend;
 
-%mend with;
-
-
-/*---------------------------------------------------------------------
-   TESTS (manually run in SAS):
-
-   %with(
-     raw,
-     SELECT * FROM sashelp.class,
-     lkp,
-     SELECT name FROM sashelp.class where age>13,
-     SELECT raw.* FROM raw where raw.name in (SELECT lkp.name FROM lkp)
-   );
-
-   Expected final query (approximate):
-   SELECT raw.* FROM (SELECT * FROM sashelp.class) raw 
-   where raw.name in (
-       SELECT lkp.name 
-       FROM (SELECT name FROM sashelp.class where age>13) lkp
-   );
-
-   This should be a valid nested query that can be executed.
-
----------------------------------------------------------------------*/
+%macro execute_final_query;
+   %if %symexist(execute) and &execute eq 1 %then %do;
+      %include "&hash_file";
+   %end;
+%mend;
