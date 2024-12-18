@@ -1,57 +1,75 @@
-%macro assertTrue(condition, message=, resultDir=results, debugLevel=2);
-    %local rc programName resultFile timestamp headerFlag callStack;
-    
-    /* Step 1: Determine the calling program name */
-    %if %symexist(SYSIN) and %length(&SYSIN) > 0 %then %do;
-        %let programName = %scan(&SYSIN, -1, /);
-    %end;
-    %else %if %symexist(SYSPROCESSNAME) %then %do;
-        %let programName = %scan(&SYSPROCESSNAME, -1, /);
-    %end;
-    %else %do;
-        %let programName = unknown_program;
-    %end;
+%macro symbol_dne(symbol);
+((%symexist(&symbol.)=0 + ("&symbol."="")) gt 0)
+%mend;
 
-    /* Step 2: Ensure result directory exists */
-    %if not %sysfunc(fileexist(&resultDir)) %then %do;
-        options dlcreatedir;
-        libname results "&resultDir";
-        libname results clear;
-    %end;
+%macro itit_globals;
+%if %symbol_dne(testCount) %then %do;
+	%global testCount;
+	%let testCount=0;
+%end;
+%if %symbol_dne(testFailures) %then %do;
+	%global testFailures;
+	%let testFailures=0;
+%end;
+%if %symbol_dne(testErrors) %then %do;
+	%global testErrors;
+	%let testErrors=0;
+%end;
+%mend;
 
-    /* Step 3: Construct the result file path */
-    %let resultFile = &resultDir/&programName.__testResults.txt;
+%macro reset_test_counts;
+%global testCount testErrors testFailures;
+%let testCount=0;
+%let testFailures=0;
+%let testErrors=0;
+%mend;
 
-    /* Step 4: Add a timestamp */
-    %let timestamp = %sysfunc(datetime(), datetime20.);
+%macro assertTrue(condition, message);
+/*
+Assert that the given condition that evaluates to either 0 
+(for false) or 1 (for true) is true.
 
-    /* Step 5: Check if the result file exists */
-    %let headerFlag = %sysfunc(fileexist(&resultFile));
+Logs a PASS if 1, FAIL if 0, and ERROR if anything else.
 
-    /* Step 6: Capture the macro call stack (debug level 2+) */
-    %if &debugLevel >= 2 %then %do;
-        %let callStack = %sysfunc(sysget(SAS_EXECFILENAME));
-    %end;
-    %else %do;
-        %let callStack = -;
-    %end;
+@param condition : Macro expression resolving to 1 for true
+or 0 for false
+@param message : A message that prints regardless of whether the 
+test passes to identify and describe the test.
+*/
 
-    /* Step 7a: Get line to add to log */
-    %let logLine = "&timestamp, %if &condition %then PASS %else FAIL, &message, &condition, &programName, &callStack";
+%itit_globals;
 
-    /* Step 7: Evaluate the condition and log results */
-    filename resultFile "&resultFile";
-    data _null_;
-        file resultFile mod;
-        /* Write header if the file does not exist */
-        %if &headerFlag = 0 %then %do;
-            put "Timestamp, Test Status, Message, Condition, Program, Call Stack";
-        %end;
-        put &logLine;
-    run;
+%let testPass=%eval(&testCount - &testFailures);
+%let testCount=%eval(&testCount + 1);
 
-    %if not (&condition) %then %let rc = 1; /* Failure */
-    %else %let rc = 0; /* Success */
+%if %eval(&condition)=1 %then %do;
+	%let testPass=%eval(&testPass + 1);
+	%put [PASS] - &testPass.|&testFailures.|&testErrors. - &message;
+%end;
+%else %if %eval(&condition)=0 %then %do;
+	%let testFailures=%eval(&testFailures + 1);
+	%put [FAIL] - &testPass.|&testFailures.|&testErrors. - &message;
+%end;
+%else %do;
+	%let testErrors=%eval(&testErrors + 1);
+	%put [ERROR] - &testPass.|&testFailures.|&testErrors. - &message.;
+	%put [ERROR] - &testPass.|&testFailures.|&testErrors. - &condition. evaluates to %eval(&condition);
+	%put [ERROR] - &testPass.|&testFailures.|&testErrors. - &condition. must evaluate to either 0 or 1;
+%end;
+%mend;
 
-    &rc
+%macro assertFalse(condition, message);
+%if %eval(&condition)=0 %then %let cond=1;
+%else %let cond=0;
+%assertTrue(%eval(&cond.), &message.);
+%mend;
+
+%macro assertEqual(actual, expected);
+%let message=Asserted that [&actual.]=[&expected.];
+%assertTrue(%eval(&actual=&expected), &message.);
+%mend;
+
+%macro assertNotEqual(actual, expected);
+%let message=Asserted that [&actual.]!=[&expected.];
+%assertFalse(%eval(&actual=&expected), &message.);
 %mend;
