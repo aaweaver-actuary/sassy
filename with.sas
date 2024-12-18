@@ -1,3 +1,7 @@
+%include "/sas/data/project/EG/ActShared/aw/assertions.sas";
+
+%reset_test_counts;
+
 /************************************************************************************/
 /* Macro: %WITH                                                                     */
 /*                                                                                  */
@@ -124,16 +128,61 @@
    %let count = %eval(&count - 1);
 %mend;
 
+%macro test_init_params;
+   %let syspbuff = (ds1 := SELECT id, value1, filter_column FROM tbl1 |> ds2 := SELECT id, value2 FROM tbl2 |> lkp := SELECT distinct filter_col FROM lkp |> filtered_ds1 := (SELECT ds1.* FROM ds1 WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp)) |> final_join := (SELECT ds1.value1, ds2.value2 FROM filtered_ds1 AS ds1 JOIN ds2 ON ds1.id = ds2.id) |> SELECT final_join.* FROM final_join);
+   %initialize_parameters;
+   %assertEq(&all_params, "&syspbuff.");
+   %assertEq(&count, 5);
+%mend;
+
+%test_init_params;
+
 %macro validate_input_arguments;
+   %global is_valid;
+   %let is_valid = 1;
    %if &count < 1 %then %do;
       %put ERROR: No parameters provided to %WITH_PREPROCESSOR macro.;
+      %let is_valid = 0;
       %abort;
    %end;
    %if %sysfunc(mod(&count, 2)) ne 1 %then %do;
       %put ERROR: Parameters do not form valid name/definition pairs.;
+      %let is_valid = 0;
       %abort;
    %end;
+   %if %length(%scan(&all_params, &count, |>,)) eq 0 %then %do;
+      %put ERROR: No final query provided.;
+      %let is_valid = 0;
+      %abort;
+   %end;
+
+   &is_valid
 %mend;
+
+%macro test_validate_input_arguments;
+   /*  Valid input */
+   %let is_valid = 1;
+   %let all_params = (ds1 := SELECT id, value1, filter_column FROM tbl1 |> ds2 := SELECT id, value2 FROM tbl2 |> lkp := SELECT distinct filter_col FROM lkp |> filtered_ds1 := (SELECT ds1.* FROM ds1 WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp)) |> final_join := (SELECT ds1.value1, ds2.value2 FROM filtered_ds1 AS ds1 JOIN ds2 ON ds1.id = ds2.id) |> SELECT final_join.* FROM final_join);
+   %let count = 5;
+   %assertTrue(%validate_input_arguments);
+
+   /* Does not have final query */
+   %let all_params = (ds1 := SELECT id, value1, filter_column FROM tbl1 |> ds2 := SELECT id, value2 FROM tbl2 |> lkp := SELECT distinct filter_col FROM lkp |> filtered_ds1 := (SELECT ds1.* FROM ds1 WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp)) |> final_join := (SELECT ds1.value1, ds2.value2 FROM filtered_ds1 AS ds1 JOIN ds2 ON ds1.id = ds2.id) |>);
+   %let count = 4;
+   %assertFalse(%validate_input_arguments);
+
+   /* No parameters */
+   %let all_params = ();
+   %let count = 6;
+   %assertFalse(%validate_input_arguments);
+
+   /* Odd number of parameters */
+   %let all_params = (ds1 := SELECT id, value1, filter_column FROM tbl1 |> ds2 := SELECT id, value2 FROM tbl2 |> lkp := SELECT distinct filter_col FROM lkp |> filtered_ds1 := (SELECT ds1.* FROM ds1 WHERE ds1.filter_column IN (SELECT lkp.filter FROM lkp)) |> final_join := (SELECT ds1.value1, ds2.value2 FROM filtered_ds1 AS ds1 JOIN ds2 ON ds1.id = ds2.id) |> SELECT final_join.* FROM final_join);
+   %let count = 6;
+   %assertFalse(%validate_input_arguments);
+%mend;
+
+%test_validate_input_arguments;
 
 %macro parse_parameters_into_variables;
    %global n_param_pairs final_query;
@@ -150,6 +199,31 @@
    %end;
 
    %let final_query = %qtrim(%qscan(&all_params, &j, |>,));
+%mend;
+
+%macro test_parse_params;
+   %let input1=(ds1 := select * from tbl |> ids := select distinct id from tbl2 |> select * from ds1 where ds1.id in (select id from ids));
+   %parse_parameters_into_variables;
+
+   %assertEq(&n_param_pairs1, 2);
+   %assertEq(&name1, ds1);
+   %assertEq(&sql1, select * from tbl);
+   %assertEq(&name2, ids);
+   %assertEq(&sql2, select distinct id from tbl2);
+   %assertEq(&final_query1, select * from ds1 where ds1.id in (select id from ids));
+
+   %let input2=(ds1 := select * from tbl |> ids := select distinct id from tbl2 |> ds3 := select * from ds1 where ds1.id in (select id from ids) |> select * from ds3);
+   %parse_parameters_into_variables;
+
+   %assertEq(&n_param_pairs2, 3);
+   %assertEq(&name1, ds1);
+   %assertEq(&sql1, select * from tbl);
+   %assertEq(&name2, ids);
+   %assertEq(&sql2, select distinct id from tbl2);
+   %assertEq(&name3, ds3);
+   %assertEq(&sql3, select * from ds1 where ds1.id in (select id from ids));
+   %assertEq(&final_query2, select * from ds3);
+
 %mend;
 
 %macro gen_hash_to_id_query;

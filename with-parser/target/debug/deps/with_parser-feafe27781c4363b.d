@@ -10,5 +10,5 @@ src/convert_vec_of_cte_statements_to_proc_sql_syntax.rs:
 src/ffi.rs:
 Cargo.toml:
 
-# env-dep:CLIPPY_ARGS=--no-deps__CLIPPY_HACKERY__
+# env-dep:CLIPPY_ARGS=
 # env-dep:CLIPPY_CONF_DIR
