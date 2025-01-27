@@ -1,3 +1,30 @@
+%macro create_test_summary_tbl_if_not_exists;
+	%if %symexist(test_summary) %then %do;
+		%put NOTE: test_summary table already exists;
+	%end;
+	%else %do;
+		%put NOTE: Creating test_summary table;
+		proc sql;
+			create table WORK.test_summary (
+				test_suite char(255),
+				test_count num,
+				test_passes num,
+				test_failures num,
+				test_errors num
+			);
+		quit;
+	%end;
+%mend create_test_summary_tbl_if_not_exists;
+
+%macro insert_test_summary(test_suite, test_count, test_passes, test_failures, test_errors);
+	proc sql;
+		insert into WORK.test_summary
+		values ("&test_suite.", &test_count., &test_passes., &test_failures., &test_errors.);
+	quit;
+%mend insert_test_summary;
+
+%create_test_summary_tbl_if_not_exists;
+
 /* %macro _check_color_support;
     %global HAS_COLOR;
     %let HAS_COLOR = 0;
@@ -130,12 +157,15 @@ test passes to identify and describe the test.
 	%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests passed;
 	%else %put &logFAIL. - Some tests failed;
 
+	%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures - &testErrors, &testFailures, &testErrors);
+
 	%put ======================>> Test Summary [DONE];
 
 	%put ======================>> Running unit tests for &testSuite [DONE];
 %MEND test_summary;
 
 %put ======================>> Loading assert.sas [DONE];
+
 
 /* Test these assertion macros */
 %MACRO test_assertions;
