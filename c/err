@@ -1,0 +1,8 @@
+hashmap.cpp:9:7: error: redefinition of ‘class HashMap’
+    9 | class HashMap {
+      |       ^~~~~~~
+In file included from hashmap.cpp:1:
+hashmap.h:8:7: note: previous definition of ‘class HashMap’
+    8 | class HashMap {
+      |       ^~~~~~~
+make: *** [Makefile:9: test] Error 1
