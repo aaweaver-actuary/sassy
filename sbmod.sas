@@ -1,3 +1,4 @@
+%macro sbmod(module, base_path=/sas/data/project/EG/aweaver/macros);
 /*
 The `sbmod` macro is used to import a module into the global scope.
 The module is only imported once, and subsequent calls to `sbmod` with the
@@ -13,8 +14,7 @@ using Andy's macro repository.
 %sbmod(module_name, base_path=/path/to/modules);
 Includes the module `module_name` into the global scope, where the module
 is located at `/path/to/modules/module_name.sas`.
- */
-%macro sbmod(module, base_path=/sas/data/project/EG/aweaver/macros);
+*/
     %let varname=_imported__&module.;
     %if %symexist(&varname.) ne 1 %then %do;
         %global &varname.;
@@ -36,3 +36,4 @@ is located at `/path/to/modules/module_name.sas`.
         %put NOTE: Module &module. already imported.;
     %end;
 %mend sbmod;
+
