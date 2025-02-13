@@ -8,30 +8,43 @@
     %end;
 %mend foreach;
 
+%macro transform(list, surrounded_by=, delimited_by=);
+    %local i item count transformedList;
+    %let count = %len(&list);
+
+    %do i = 1 %to &count;
+        %let item = %nth(&list, &i);
+        %let transformedList = &transformedList &surrounded_by&item&surrounded_by;
+        %if &i < &count %then %let transformedList = &transformedList &delimited_by;
+    %end;
+
+    &transformedList
+%mend transform;;
+
 %macro len(list);
     %local count;
     %let count = %sysfunc(countw(&list));
     &count
-%mend len;
+%mend len;;
 
 %macro nth(list, n);
     %local item;
     %let item = %scan(&list, &n);
     &item
-%mend nth;
+%mend nth;;
 
 %macro first(list);
     %local item;
     %let item = %nth(&list, 1);
     &item
-%mend first;
+%mend first;;
 
 %macro last(list);
     %local count item;
     %let count = %len(&list);
     %let item = %nth(&list, &count);
     &item
-%mend last;
+%mend last;;
 
 %macro unique(list);
     %local i item count uniqueList;
@@ -45,7 +58,7 @@
     %end;
 
     &uniqueList
-%mend unique;
+%mend unique;;
 
 %macro sorted(list);
     %local i item count sortedList;
