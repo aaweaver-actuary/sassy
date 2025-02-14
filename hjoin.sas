@@ -1,5 +1,9 @@
 %sbmod(validate);
 %sbmod(lists);
+%sbmod(logger);
+
+%let log_level=DEBUG;
+%clean_logger;
 
 %macro extract_from_variable(x);
     /*
@@ -22,19 +26,30 @@
     - &__temp_var_len: 20
      */
     /* Is there a pipe in this string? */
-    %let is_num=%index(&x., |)=0;
-    %let is_char=%index(&x., |) ne 0;
-
-    %if &is_num. %then %do;
-        %let __temp_var_name=&x.;
-        %let __temp_var_len=0;
-        %let __num_var_len=&__temp_var_name.;
-    %end;
-    %else %if &is_char. %then %do;
+    %let is_char=%eval(%index(&x., |) ne 0);
+    %if &is_char. %then %do;
+		%dbg(EXTRACT - Inside is_char block since:);
+		%dbg(EXTRACT - x: &x.);
+		%dbg(EXTRACT - is_char: &is_char.);
         %let __temp_var_name=%scan(&x., 1, |);
         %let __temp_var_len=%scan(&x., 2, |);
         %let __char_var_len=&__temp_var_name.;
         %let __char_len_len=&__temp_var_len.;
+		%dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
+		%dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
+		%dbg(EXTRACT - __char_var_len: &__char_var_len.);
+		%dbg(EXTRACT - __char_len_len: &__char_len_len.);
+    %end;
+    %else %do;
+		%dbg(EXTRACT - Inside is_num block since:);
+		%dbg(EXTRACT - x: &x.);
+		%dbg(EXTRACT - is_char: &is_char.);
+        %let __temp_var_name=&x.;
+        %let __temp_var_len=0;
+        %let __num_var_len=&__temp_var_name.;
+		%dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
+		%dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
+		%dbg(EXTRACT - __num_var_len: &__num_var_len.);
     %end;
 
 %mend extract_from_variable;
@@ -115,7 +130,7 @@
 
     /* Initialize global variables */
     %let globals=__temp_var_len __temp_var_name __num_var_len __char_len_len
-        __char_var_len __keys __data;
+        __has_data __char_var_len __keys __data;
     %do i=1 %to %sysfunc(countw(&globals.));
         %let global_var=%scan(&globals., &i);
         %global &global_var.;
@@ -140,7 +155,10 @@
     %end;
 
     %if %validate_exists(&key.)=0 %then %do;
+		%info(Unable to validate the key parameter);
+		%info(Expected key: &key.);
         %put ERROR: The `key` parameter is required.;
+		%put ERROR: Expected key: &key.;
         %return;
     %end;
     %else %do;
@@ -149,8 +167,16 @@
             %if &i.=1 %then %let __keys=&cur_key.;
             %else %let __keys=&__keys. &cur_key.;
             %parse_variable(&cur_key.);
-            %if &i=1 %then %let key_stmnt="&cur_key.";
-            %else %let key_stmnt=&key_stmnt ", &cur_key.";
+
+			%dbg(at key stmnt create:);
+			%dbg(i: &i.);
+			%dbg(cur_key: &cur_key.);
+			%dbg(key_stmnt before: &key_stmnt.);
+
+            %if &i=1 %then %let key_stmnt=%str(%")&cur_key.%str(%");
+            %else %let key_stmnt=&key_stmnt, %str(%")&cur_key.%str(%");
+			
+			%dbg(key_stmnt after: &key_stmnt.);
 
             %if &i=1 %then %let missing_key_stmnt=&cur_key.;
             %else %let missing_key_stmnt=&missing_key_stmnt, &cur_key.;
@@ -158,72 +184,184 @@
         %end;
     %end;
 
+    /* Default expectation is no data variables */
+    %let __has_data=0;
     %if %validate_exists(&data.)=0 %then %do;
+		%dbg(Not able to validate that the data input exists:);
+		%dbg(data: &data.);
         %let data_stmnt=;
         %put NOTE: The `data` parameter was not provided. No additional data
             will be appended to &out.;
         %let data.=;
     %end;
     %else %do;
-        %do i=1 %to %sysfunc(countw(&data.));
-            %let cur_data=%scan(&data., &i);
-            %if &i.=1 %then %let __data=&cur_data.;
-            %else %let __data=&__data. &cur_data.;
-            %parse_variable(&cur_data.);
-            %if &i=1 %then %let data_stmnt="&cur_data.";
-            %else %let data_stmnt=&data_stmnt ", &cur_data.";
+        %let __has_data=1;
+		%dbg(Able to validate that the data input exists:);
+		%dbg(data: &data.);
 
-            %if &i=1 %then %let missing_data_stmnt=&cur_data.;
-            %else %let missing_data_stmnt=&missing_data_stmnt, &cur_data.;
+		%let data_adj=%sysfunc(tranwrd(%str(%")&data.%str(%"), %str(%")|%str(%"), %str(%")ZZZ%str(%")));
+		%dbg(data_adj: &data_adj.);
+        %do i=1 %to %sysfunc(countw(&data_adj.));
+			%let cur_data=%scan(&data_adj., &i);
+
+			%dbg(current data before parse: &cur_data.);
+			%parse_variable(&cur_data.);
+			%dbg(current data after parse: &cur_data.);
+
+
+			%let var=%nth(&cur_data., 1);
+			%let var_len=%nth(&cur_data., 2);
+
+			%dbg(var: &var.);
+			%dbg(var_len: &var_len.);
+
+            %if &i.=1 %then %do;
+				%let idx=%index("|", "&var.");
+				%dbg(idx: &idx.);
+
+				%let nm=&var.;
+				%if &idx. ne 0 %then 
+					%let nm=%substr(&var., 1, &idx.);
+
+				%dbg(nm: &nm.);
+
+				%let __data=&nm.;
+			
+				%let data_stmnt=%str(%")&nm.%str(%");
+				%let missing_data_stmnt=&cur_data.;
+			%end;
+			%else %do;
+				%let idx=%index("|", "&var.");
+				%dbg(idx: &idx.);
+
+				%let nm=&var.;
+				%if &idx. ne 0 %then 
+					%let nm=%substr(&var., &idx, &idx.);
+
+				%dbg(nm: &nm.);
+
+            	%let __data=&__data. &var.;
+				%let data_stmnt=&data_stmnt., %str(%")&var.%str(%");
+				%let missing_data_stmnt=&missing_data_stmnt., &cur_data.;
+			%end;
         %end;
     %end;
 
+    %dbg(HJOIN - Input parameters validated);
+    %dbg(HJOIN - in: &in.);
+    %dbg(HJOIN - out: &out.);
+    %dbg(HJOIN - map: &map.);
+	%dbg(HJOIN - key: &key.);
+	%dbg(HJOIN - __keys: &__keys.);
+    %dbg(HJOIN - key_stmnt: &key_stmnt.);
+	%dbg(HJOIN - __data: &__data.);
+    %dbg(HJOIN - data: &data_stmnt.);
+    %dbg(HJOIN - filter: &filter.);
+    %dbg(HJOIN - default_missing: &default_missing.);
+
     data &out.;
         if _n_=1 then do;
-            length &__num_var_len 8.;
-            %if %validate_exists(&__char_len_len.)=1 %then %do;
-                %do i=1 %to %sysfunc(countw(&__char_len_len.));
-                    %let cur_len=%scan(&__char_len_len., &i);
-                    length %scan(&__char_var_len., &i) $&cur_len.;
-                %end;
-            %end;
-
-            dcl hash h(dataset: "&map.", multidata: "yes");
-            h.defineKey(&key_stmnt.);
-            %if "&data_stmnt." ne "" %then %do;
-                h.defineData(&data_stmnt.);
-            %end;
-
-            h.defineDone();
-            call missing(&missing_key_stmnt.);
-            %if "&missing_data_stmnt." ne "" %then %do;
-                call missing(&missing_data_stmnt.);
-            %end;
-        %end;
+            %make_length_statements;
+            %declare_hash_object;
+            %initialize_variables;
+        end;
 
         set &in.;
-
         rc=h.find();
-
-        %if &filter. %then %do;
-            if rc=0 then output;
-        %end;
-        %else %do;
-            if rc ne 0 then do;
-                %if "&data_stmnt." ne "" %then %do;
-                    %do i=1 %to %sysfunc(countw(&__char_var_len.));
-                        %let cur_var=%scan(&__char_var_len., &i);
-                        &cur_var="&default_missing.";
-                    %end;
-                    %do i=1 %to %sysfunc(countw(&__num_var_len.));
-                        %let cur_var=%scan(&__num_var_len., &i);
-                        &cur_var=&default_missing.;
-                    %end;
-                %end;
-                output;
-            end;
-        %end;
-
-    run;
+        %handle_defaults(rc, filter);
+	run;
 
 %mend hjoin;
+
+%macro make_length_statements;
+    length &__num_var_len. 8.;
+    %let has_char_vars=%validate_exists(&__char_var_len.);
+    %if &has_char_vars. %then %do;
+        %let char_vars=&__char_var_len.;
+        %let char_lens=&__char_len_len.;
+
+        %do i=1 %to %sysfunc(countw(&char_vars.));
+            %let cur_var=%scan(&char_vars., &i);
+            %let cur_len=%scan(&char_lens., &i);
+            length &cur_var. $&cur_len.;
+        %end;
+    %end;
+%mend make_length_statements;
+
+%macro declare_hash_object;
+    %dbg(HJOIN - Inside declare_hash_object macro);
+    /* Declare the hash object */
+    dcl hash h(dataset: "&map.", multidata: "yes");
+	
+    /* KEY */
+    %dbg(HJOIN - Defining key to be [&key_stmnt.]);
+    h.defineKey(&key_stmnt.);
+
+    /* DATA (IF PROVIDED) */
+    %if "&data_stmnt." ne "" %then %do;
+        %dbg(HJOIN - Defining data to be [&data_stmnt.]);
+        h.defineData(&data_stmnt.);
+    %end;
+
+    /* DONE WITH DEFINITIONS */
+    %dbg(HJOIN - Done defining hash object);
+    h.defineDone();
+%mend declare_hash_object;
+
+%macro initialize_variables;
+    %dbg(HJOIN - Inside initialize_variables macro);
+    /* Always initialize key variables */
+    call missing(&missing_key_stmnt.);
+
+    /*  Initialize data variables if provided */
+    %if "&missing_data_stmnt." ne "" %then %do;
+        call missing(&missing_data_stmnt.);
+    %end;
+%mend initialize_variables;
+
+%macro add_missing_defaults__num;
+    %dbg(HJOIN - Inside add_missing_defaults__num macro);
+    %do i=1 %to %sysfunc(countw(&__num_var_len.));
+        %let cur_var=%scan(&__num_var_len., &i);
+        &cur_var=&default_missing.;
+    %end;
+%mend add_missing_defaults__num;
+
+%macro add_missing_defaults__char;
+    %dbg(HJOIN - Inside add_missing_defaults__char macro);
+    %do i=1 %to %sysfunc(countw(&__char_var_len.));
+        %let cur_var=%scan(&__char_var_len., &i);
+        &cur_var="&default_missing.";
+    %end;
+%mend add_missing_defaults__char;
+
+%macro handle_defaults(rc, filter);
+    %dbg(HJOIN - Inside handle_defaults macro);
+    %if &filter. %then %do;
+        if rc=0 then output;
+    %end;
+    %else %do;
+        if rc ne 0 then do;
+            %dbg(HJOIN - Adding missing defaults for numeric variables);
+            %add_missing_defaults__num;
+            %if "&data_stmnt." ne "" %then %do;
+                %dbg(HJOIN - Adding missing defaults for character variables);
+                %add_missing_defaults__char;
+            %end;
+            output;
+        end;
+    %end;
+%mend handle_defaults;
+
+
+data test;
+input sb_policy_key b c d $ e;
+datalines;
+1 10 100 a 1000
+100 10 100 b 1000
+1000 10 100 c 1000
+10000 10 100 d 1000
+25000 10 100 e 1000
+;
+
+%hjoin(in=test, out=test_out, map=decfile.policy_lookup, key=sb_policy_key, data=policy_numb policy_sym|3);

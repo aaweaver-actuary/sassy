@@ -19,32 +19,32 @@
     %end;
 
     &transformedList
-%mend transform;;
+%mend transform;
 
 %macro len(list);
     %local count;
     %let count = %sysfunc(countw(&list));
     &count
-%mend len;;
+%mend len;
 
 %macro nth(list, n);
     %local item;
     %let item = %scan(&list, &n);
     &item
-%mend nth;;
+%mend nth;
 
 %macro first(list);
     %local item;
     %let item = %nth(&list, 1);
     &item
-%mend first;;
+%mend first;
 
 %macro last(list);
     %local count item;
     %let count = %len(&list);
     %let item = %nth(&list, &count);
     &item
-%mend last;;
+%mend last;
 
 %macro unique(list);
     %local i item count uniqueList;
@@ -72,3 +72,18 @@
     %let sortedList = %sysfunc(sortn(&sortedList));
     &sortedList
 %mend sorted;
+
+%macro push(list, item);
+    &list &item
+%mend push;
+
+%macro pop(list);
+    %local count;
+    %let count = %len(&list);
+    %let list = %substr(&list, 1, %eval(%length(&list) - %length(%nth(&list, &count)) - 1));
+    &list
+%mend pop;
+
+%macro concat(list1, list2);
+    &list1 &list2
+%mend concat;
