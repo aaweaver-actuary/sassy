@@ -21,9 +21,12 @@
     &transformedList
 %mend transform;
 
-%macro len(list);
+%macro len(list, delimiters);
     %local count;
-    %let count = %sysfunc(countw(&list));
+    %if %sysfunc(length(&delimiters.)) = 0 %then 
+        %let count = %sysfunc(countw(&list));
+    %else
+        %let count = %sysfunc(countw(&list, &delimiters));
     &count
 %mend len;
 
@@ -87,3 +90,10 @@
 %macro concat(list1, list2);
     &list1 &list2
 %mend concat;
+
+%macro list_err(type);
+    %global has_err;
+    %if &type.=len %then %put ERROR: The list is empty.;
+
+    %let has_err = 1;
+%mend list_err;

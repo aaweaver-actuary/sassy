@@ -1,182 +1,194 @@
-%macro create_test_summary_tbl_if_not_exists;
-	%if %symexist(test_summary) %then %do;
-		%put NOTE: test_summary table already exists;
-	%end;
-	%else %do;
-		%put NOTE: Creating test_summary table;
-		proc sql;
-			create table WORK.test_summary (
-				test_suite char(255),
-				test_count num,
-				test_passes num,
-				test_failures num,
-				test_errors num
-			);
-		quit;
-	%end;
-%mend create_test_summary_tbl_if_not_exists;
-
-%macro insert_test_summary(test_suite, test_count, test_passes, test_failures, test_errors);
-	proc sql;
-		insert into WORK.test_summary
-		values ("&test_suite.", &test_count., &test_passes., &test_failures., &test_errors.);
-	quit;
-%mend insert_test_summary;
-
-%create_test_summary_tbl_if_not_exists;
-
-/* %macro _check_color_support;
-    %global HAS_COLOR;
-    %let HAS_COLOR = 0;
-    
-    /* Check for common environment variables that indicate color support */
-    /* %if %symexist(TERM) %then %do;
-        %if %upcase(&TERM) = XTERM %then %let HAS_COLOR = 1;
-        %else %if %upcase(&TERM) = XTERM-256COLOR %then %let HAS_COLOR = 1;
-    %end; */
-/* %mend; */ */
+%put======================>> Loading assert.sas;
 
 %macro _log_styles;
-    /* Colors */
-    %global LOG_GREEN LOG_RED LOG_YELLOW LOG_RESET;
-    %global logPASS logFAIL logERROR;
-    
-    /* Define styles based on color support */
-	/* %let LOG_GREEN=;
-	%let LOG_RED=;
-	%let LOG_YELLOW=;
-	%let LOG_RESET=; */
-
-	/* %let logPASS=&LOG_GREEN.[PASS]&LOG_RESET;
-	%let logFAIL=&LOG_RED.[FAIL]&LOG_RESET;
-	%let logERROR=&LOG_RED.[ERROR]&LOG_RESET; */
-
+	%global logPASS logFAIL logERROR;
 	%let logPASS=NOTE: [PASS];
 	%let logFAIL=ERROR: [FAIL];
 	%let logERROR=ERROR: [ERROR];
 %mend;
 
+%_log_styles;
+
 %macro symbol_dne(symbol);
-((%symexist(&symbol.)=0 + ("&symbol."="")) gt 0)
-%mend;
+	%if %symexist(%unquote(%str(&symbol.)))=0 %then %let out=1;
+	%else %if "%sysfunc(strip(%unquote(%str(&symbol.))))"="" %then %let out=1;
+	%else %let out=0;
+	&out. %mend;
+
+%macro test_symbol_dne;
+	%test_suite(Symbol DNE tests);
+
+	%test_summary;
+%mend test_symbol_dne;
 
 %macro itit_globals;
-%if %symbol_dne(testCount) %then %do;
-	%global testCount;
-	%let testCount=0;
-%end;
-%if %symbol_dne(testFailures) %then %do;
-	%global testFailures;
-	%let testFailures=0;
-%end;
-%if %symbol_dne(testErrors) %then %do;
-	%global testErrors;
-	%let testErrors=0;
-%end;
+	%if %symbol_dne(testCount) %then %do;
+		%global testCount;
+		%let testCount=0;
+	%end;
+	%if %symbol_dne(testFailures) %then %do;
+		%global testFailures;
+		%let testFailures=0;
+	%end;
+	%if %symbol_dne(testErrors) %then %do;
+		%global testErrors;
+		%let testErrors=0;
+	%end;
 %mend;
 
 %macro reset_test_counts;
-%global testCount testErrors testFailures;
-%let testCount=0;
-%let testFailures=0;
-%let testErrors=0;
+	%global testCount testErrors testFailures;
+	%let testCount=0;
+	%let testFailures=0;
+	%let testErrors=0;
 %mend;
 
 %macro assertTrue(condition, message);
-/*
-Assert that the given condition that evaluates to either 0 
-(for false) or 1 (for true) is true.
+	/*
+	Assert that the given condition that evaluates to either 0
+	(for false) or 1 (for true) is true.
 
-Logs a PASS if 1, FAIL if 0, and ERROR if anything else.
+	Logs a PASS if 1, FAIL if 0, and ERROR if anything else.
 
-@param condition : Macro expression resolving to 1 for true
-or 0 for false
-@param message : A message that prints regardless of whether the 
-test passes to identify and describe the test.
-*/
+	@param condition : Macro expression resolving to 1 for true
+	or 0 for false
+	@param message : A message that prints regardless of whether the
+	test passes to identify and describe the test.
+	 */
+	%itit_globals;
 
-%itit_globals;
+	%let testPass=%eval(&testCount - &testFailures);
+	%let testCount=%eval(&testCount + 1);
 
-%let testPass=%eval(&testCount - &testFailures);
-%let testCount=%eval(&testCount + 1);
-
-%if %eval(&condition)=1 %then %do;
-	%let testPass=%eval(&testPass + 1);
-	%put  &logPASS. - &testPass.|&testFailures.|&testErrors. - &message;
-%end;
-%else %if %eval(&condition)=0 %then %do;
-	%let testFailures=%eval(&testFailures + 1);
-	%put &logFAIL. - &testPass.|&testFailures.|&testErrors. - &message;
-%end;
-%else %do;
-	%let testErrors=%eval(&testErrors + 1);
-	%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &message.;
-	%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition. evaluates to %eval(&condition);
-	%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition. must evaluate to either 0 or 1;
-%end;
+	%if %eval(&condition)=1 %then %do;
+		%let testPass=%eval(&testPass + 1);
+		%put &logPASS. - &testPass.|&testFailures.|&testErrors. - &message;
+	%end;
+	%else %if %eval(&condition)=0 %then %do;
+		%let testFailures=%eval(&testFailures + 1);
+		%put &logFAIL. - &testPass.|&testFailures.|&testErrors. - &message;
+	%end;
+	%else %do;
+		%let testErrors=%eval(&testErrors + 1);
+		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &message.;
+		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
+			evaluates to %eval(&condition);
+		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
+			must evaluate to either 0 or 1;
+	%end;
 %mend;
 
 %macro assertFalse(condition, message);
-%if %eval(&condition)=0 %then %let cond=1;
-%else %let cond=0;
-%assertTrue(%eval(&cond.), &message.);
+	%if %eval(&condition)=0 %then %let cond=1;
+	%else %let cond=0;
+	%assertTrue(%eval(&cond.), &message.);
 %mend;
 
 %macro assertEqual(actual, expected);
-%let message=Asserted that [&actual.]=[&expected.];
-%assertTrue(%eval(&actual=&expected), &message.);
+	%let message=Asserted that [&actual.]=[&expected.];
+	%assertTrue(%eval(&actual=&expected), &message.);
 %mend;
 
 %macro assertNotEqual(actual, expected);
-%let message=Asserted that [&actual.]!=[&expected.];
-%assertFalse(%eval(&actual=&expected), &message.);
+	%let message=Asserted that [&actual.]!=[&expected.];
+	%assertFalse(%eval(&actual=&expected), &message.);
 %mend;
 
-%MACRO test_suite(name);
+/*  redo the same set of assertions but with PROC FCMP functions for
+testing inside a data step*/
+proc fcmp outlib=work.fn.assert;
+	subroutine assertTrue(condition $, message $);
+	length cmd $ 32767;
+	cmd=strip(cats('%nrstr(%assertTrue)(', condition, ', "', message, '")'));
+	put cmd=;
+	call execute(cmd);
+	endsub;
+
+	subroutine assertFalse(condition $, message $);
+	length cmd $ 32767;
+	cmd=cats('%nrstr(%assertFalse)(', condition, ', "', message, '")');
+	put cmd=;
+	call execute(cmd);
+	/* call execute(cats('%nrstr(%assertFalse)(', condition, ', "', message,
+	'")')); */
+	endsub;
+
+	subroutine assertEqual(actual $, expected $);
+	length cmd $ 32767;
+	cmd=cats('%nrstr(%assertEqual)(', actual, ', ', expected, ')');
+	put cmd=;
+	call execute(cmd);
+	/* call execute(cats('%nrstr(%assertEqual)(', actual, ', ', expected')')); */
+	endsub;
+
+	subroutine assertNotEqual(actual $, expected $);
+	length cmd $ 32767;
+	cmd=cats('%nrstr(%assertNotEqual)(', actual, ', ', expected, ')');
+	put cmd=;
+	call execute(cmd);
+	/* call execute(cats('%nrstr(%assertNotEqual)(', actual, ', ', expected')')); */
+	endsub;
+run;
+
+options cmplib=work.fn;
+
+%macro test_suite(name);
 	%global testSuite;
 	%let testSuite=&name.;
-	%put ======================>> Running unit tests for &name.;
+	%put======================>> Running unit tests for &name.;
 	%reset_test_counts;
-%MEND test_suite;
+%mend test_suite;
 
-%MACRO test_summary;
-	%put ======================>> Test Summary;
+%macro test_summary;
+	%put======================>> Test Summary;
 	%put ;
 	%put |----------------------------------|;
 	%put | &testSuite;
-    %put |----------------------------------|;
 	%put |----------------------------------|;
-	%put | Test Count:    | &testCount;
+	%put |----------------------------------|;
+	%put | Test Count: | &testCount;
 	%put |----------------------------------|;
 	%put | Test Failures: | &testFailures;
 	%put |----------------------------------|;
-	%put | Test Errors:   | &testErrors;
+	%put | Test Errors: | &testErrors;
 	%put |----------------------------------|;
 	%put |----------------------------------|;
 	%put ;
-	%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests passed;
+	%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests
+		passed;
 	%else %put &logFAIL. - Some tests failed;
 
-	%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures - &testErrors, &testFailures, &testErrors);
+	%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures -
+		&testErrors, &testFailures, &testErrors);
 
-	%put ======================>> Test Summary [DONE];
+	%put======================>> Test Summary [DONE];
 
-	%put ======================>> Running unit tests for &testSuite [DONE];
-%MEND test_summary;
+	%put======================>> Running unit tests for &testSuite [DONE];
+%mend test_summary;
 
-%put ======================>> Loading assert.sas [DONE];
-
+%put======================>> Loading assert.sas [DONE];
 
 /* Test these assertion macros */
-%MACRO test_assertions;
+%macro test_assertions;
 	%test_suite(Testing assert);
 
-		%assertTrue(1, "1 is true");
-		%assertFalse(0, "0 is false");
-		%assertEqual(1, 1);
-		%assertNotEqual(1, 0);
+	%assertTrue(1, 1 is true);
+	%assertFalse(0, 0 is false);
+	%assertEqual(1, 1);
+	%assertNotEqual(1, 0);
+
+	%assertTrue(%symbol_dne(asdafasdf), 'asdafasdf' was not previously defined);
+
+	data _null_;
+		length result $ 32767;
+
+		call assertTrue('1', "1 is true DATA STEP ASSERTIONS");
+		call assertFalse('0', "0 is false");
+		call assertEqual('1', '1');
+		call assertNotEqual('1', '0');
+	run;
 
 	%test_summary;
-%MEND test_assertions;
+%mend test_assertions;
 
 %test_assertions;

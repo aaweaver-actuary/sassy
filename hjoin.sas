@@ -351,7 +351,7 @@
     %end;
 %mend handle_defaults;
 
-%macro parseVarList(varlist=, outnum=, outchar=, outchlen=);
+%macro parse_var_list(varlist);
     /**
      * Parses a space‐delimited list of variable definitions.
      *
@@ -360,22 +360,18 @@
      *
      * Parameters:
      *   varlist   - The input string (e.g., "num1 num2 char1|3 char2|10")
-     *   outnum    - Name of the macro variable (global) to hold numeric variable names.
-     *   outchar   - Name of the macro variable (global) to hold character variable names.
-     *   outchlen  - Name of the macro variable (global) to hold the character lengths.
      *
-     * After execution, the global macro variables specified by outnum, outchar, and outchlen
-     * will contain space-separated lists of the corresponding values.
+     * After execution, the global macro variables specified by __list_num, __list_char,
+     * and __list_char_len for the numeric variable names, character variable names, and
+     * character variable lengths, respectively, will contain space-separated lists
+     * of the corresponding values.
      *
      * Example:
-     *   %parseVarList(varlist=num1 num2 char1|3 char2|10,
-     *                 outnum=NUM_VARS,
-     *                 outchar=CHAR_VARS,
-     *                 outchlen=CHAR_LENS);
+     *   %parse_var_list(num1 num2 char1|3 char2|10);
      *
-     *   %put NUM_VARS = &NUM_VARS;
-     *   %put CHAR_VARS = &CHAR_VARS;
-     *   %put CHAR_LENS = &CHAR_LENS;
+     *   %put __list_num = &__list_num;
+     *   %put CHAR_VARS = &__list_char;
+     *   %put __list_char_len = &__list_char_len;
      */
     %local i token varName varLen count;
     %let nVars=;
@@ -383,7 +379,10 @@
     %let cLens=;
 
     /* Count the number of tokens in the input string */
-    %let count=%sysfunc(countw(&varlist, %str( )));
+    %let count=%len(&varlist, %str( ));
+
+    %if &count=0 %then %list_err(len);
+    %if &has_err.=1 %then %return;
 
     %do i=1 %to &count;
         %let token=%qscan(&varlist, &i, %str( ));
@@ -400,31 +399,54 @@
     %end;
 
     /* Create global macro variables with the cleaned (compacted) lists */
-    %global &outnum &outchar &outchlen;
-    %let &outnum=%sysfunc(compbl(&nVars));
-    %let &outchar=%sysfunc(compbl(&cVars));
-    %let &outchlen=%sysfunc(compbl(&cLens));
-%mend parseVarList;
+    %global __list_num __list_char __list_char_len;
+    %let __list_num=%sysfunc(compbl(&nVars));
+    %let __list_char=%sysfunc(compbl(&cVars));
+    %let __list_char_len=%sysfunc(compbl(&cLens));
+%mend parse_var_list;
 
 /*--- Test the macro ---*/
+%macro test_parse_var_list;
+    %sbmod(assert);
 
-/* %parseVarList(varlist=num1 num2 char1|3 char2|10,
-outnum=NUM_VARS,
-outchar=CHAR_VARS,
-outchlen=CHAR_LENS);
+    %test_suite(Parse Variable List);
+        %parse_var_list(num1 num2 char1|3 char2|10);
 
-%put NUM_VARS = &NUM_VARS;
-%put CHAR_VARS = &CHAR_VARS;
-%put CHAR_LENS = &CHAR_LENS; */
-data test;
-    input sb_policy_key b c d $ e;
-    datalines;
+        %assertEq(&__list_num.,num1 num2);
+        %assertEq(&__list_char.,char1 char2);
+        %assertEq(&__list_char_len.,3 10);
+    %test_summary;
+%mend test_parse_var_list;
+
+%test_parse_var_list;
+
+
+%macro test_hjoin;
+    %sbmod(assert);
+    data test;
+        input sb_policy_key b c d $ e;
+        datalines;
 1 10 100 a 1000
 100 10 100 b 1000
 1000 10 100 c 1000
 10000 10 100 d 1000
 25000 10 100 e 1000
 ;
+    run;
 
-    %hjoin(in=test, out=test_out, map=decfile.policy_lookup, key=sb_policy_key,
-        data=policy_numb policy_sym|3);
+    %test_suite(HJOIN);        
+        %hjoin(in=test, out=test_out, map=decfile.policy_lookup, key=sb_policy_key,
+            data=policy_numb policy_sym|3);
+            
+        data row1;
+            set test_out;
+            if _n_=1 then do;
+                assert(sb_policy_key=1);
+                assert(b=10);
+                assert(c=100);
+                assert(d="a");
+                assert(e=1000);
+                assert(policy_numb=1);
+                assert(policy_sym="aaa");
+            end;
+        
