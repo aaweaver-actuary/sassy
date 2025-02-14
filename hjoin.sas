@@ -28,28 +28,28 @@
     /* Is there a pipe in this string? */
     %let is_char=%eval(%index(&x., |) ne 0);
     %if &is_char. %then %do;
-		%dbg(EXTRACT - Inside is_char block since:);
-		%dbg(EXTRACT - x: &x.);
-		%dbg(EXTRACT - is_char: &is_char.);
+        %dbg(EXTRACT - Inside is_char block since:);
+        %dbg(EXTRACT - x: &x.);
+        %dbg(EXTRACT - is_char: &is_char.);
         %let __temp_var_name=%scan(&x., 1, |);
         %let __temp_var_len=%scan(&x., 2, |);
         %let __char_var_len=&__temp_var_name.;
         %let __char_len_len=&__temp_var_len.;
-		%dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
-		%dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
-		%dbg(EXTRACT - __char_var_len: &__char_var_len.);
-		%dbg(EXTRACT - __char_len_len: &__char_len_len.);
+        %dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
+        %dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
+        %dbg(EXTRACT - __char_var_len: &__char_var_len.);
+        %dbg(EXTRACT - __char_len_len: &__char_len_len.);
     %end;
     %else %do;
-		%dbg(EXTRACT - Inside is_num block since:);
-		%dbg(EXTRACT - x: &x.);
-		%dbg(EXTRACT - is_char: &is_char.);
+        %dbg(EXTRACT - Inside is_num block since:);
+        %dbg(EXTRACT - x: &x.);
+        %dbg(EXTRACT - is_char: &is_char.);
         %let __temp_var_name=&x.;
         %let __temp_var_len=0;
         %let __num_var_len=&__temp_var_name.;
-		%dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
-		%dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
-		%dbg(EXTRACT - __num_var_len: &__num_var_len.);
+        %dbg(EXTRACT - __temp_var_name: &__temp_var_name.);
+        %dbg(EXTRACT - __temp_var_len: &__temp_var_len.);
+        %dbg(EXTRACT - __num_var_len: &__num_var_len.);
     %end;
 
 %mend extract_from_variable;
@@ -155,10 +155,10 @@
     %end;
 
     %if %validate_exists(&key.)=0 %then %do;
-		%info(Unable to validate the key parameter);
-		%info(Expected key: &key.);
+        %info(Unable to validate the key parameter);
+        %info(Expected key: &key.);
         %put ERROR: The `key` parameter is required.;
-		%put ERROR: Expected key: &key.;
+        %put ERROR: Expected key: &key.;
         %return;
     %end;
     %else %do;
@@ -168,15 +168,15 @@
             %else %let __keys=&__keys. &cur_key.;
             %parse_variable(&cur_key.);
 
-			%dbg(at key stmnt create:);
-			%dbg(i: &i.);
-			%dbg(cur_key: &cur_key.);
-			%dbg(key_stmnt before: &key_stmnt.);
+            %dbg(at key stmnt create:);
+            %dbg(i: &i.);
+            %dbg(cur_key: &cur_key.);
+            %dbg(key_stmnt before: &key_stmnt.);
 
             %if &i=1 %then %let key_stmnt=%str(%")&cur_key.%str(%");
             %else %let key_stmnt=&key_stmnt, %str(%")&cur_key.%str(%");
-			
-			%dbg(key_stmnt after: &key_stmnt.);
+
+            %dbg(key_stmnt after: &key_stmnt.);
 
             %if &i=1 %then %let missing_key_stmnt=&cur_key.;
             %else %let missing_key_stmnt=&missing_key_stmnt, &cur_key.;
@@ -187,8 +187,8 @@
     /* Default expectation is no data variables */
     %let __has_data=0;
     %if %validate_exists(&data.)=0 %then %do;
-		%dbg(Not able to validate that the data input exists:);
-		%dbg(data: &data.);
+        %dbg(Not able to validate that the data input exists:);
+        %dbg(data: &data.);
         %let data_stmnt=;
         %put NOTE: The `data` parameter was not provided. No additional data
             will be appended to &out.;
@@ -196,54 +196,52 @@
     %end;
     %else %do;
         %let __has_data=1;
-		%dbg(Able to validate that the data input exists:);
-		%dbg(data: &data.);
+        %dbg(Able to validate that the data input exists:);
+        %dbg(data: &data.);
 
-		%let data_adj=%sysfunc(tranwrd(%str(%")&data.%str(%"), %str(%")|%str(%"), %str(%")ZZZ%str(%")));
-		%dbg(data_adj: &data_adj.);
+        %let data_adj=%sysfunc(tranwrd(%str(%")&data.%str(%"),
+            %str(%")|%str(%"), %str(%")ZZZ%str(%")));
+        %dbg(data_adj: &data_adj.);
         %do i=1 %to %sysfunc(countw(&data_adj.));
-			%let cur_data=%scan(&data_adj., &i);
+            %let cur_data=%scan(&data_adj., &i);
 
-			%dbg(current data before parse: &cur_data.);
-			%parse_variable(&cur_data.);
-			%dbg(current data after parse: &cur_data.);
+            %dbg(current data before parse: &cur_data.);
+            %parse_variable(&cur_data.);
+            %dbg(current data after parse: &cur_data.);
 
+            %let var=%nth(&cur_data., 1);
+            %let var_len=%nth(&cur_data., 2);
 
-			%let var=%nth(&cur_data., 1);
-			%let var_len=%nth(&cur_data., 2);
-
-			%dbg(var: &var.);
-			%dbg(var_len: &var_len.);
+            %dbg(var: &var.);
+            %dbg(var_len: &var_len.);
 
             %if &i.=1 %then %do;
-				%let idx=%index("|", "&var.");
-				%dbg(idx: &idx.);
+                %let idx=%index("|", "&var.");
+                %dbg(idx: &idx.);
 
-				%let nm=&var.;
-				%if &idx. ne 0 %then 
-					%let nm=%substr(&var., 1, &idx.);
+                %let nm=&var.;
+                %if &idx. ne 0 %then %let nm=%substr(&var., 1, &idx.);
 
-				%dbg(nm: &nm.);
+                %dbg(nm: &nm.);
 
-				%let __data=&nm.;
-			
-				%let data_stmnt=%str(%")&nm.%str(%");
-				%let missing_data_stmnt=&cur_data.;
-			%end;
-			%else %do;
-				%let idx=%index("|", "&var.");
-				%dbg(idx: &idx.);
+                %let __data=&nm.;
 
-				%let nm=&var.;
-				%if &idx. ne 0 %then 
-					%let nm=%substr(&var., &idx, &idx.);
+                %let data_stmnt=%str(%")&nm.%str(%");
+                %let missing_data_stmnt=&cur_data.;
+            %end;
+            %else %do;
+                %let idx=%index("|", "&var.");
+                %dbg(idx: &idx.);
 
-				%dbg(nm: &nm.);
+                %let nm=&var.;
+                %if &idx. ne 0 %then %let nm=%substr(&var., &idx, &idx.);
 
-            	%let __data=&__data. &var.;
-				%let data_stmnt=&data_stmnt., %str(%")&var.%str(%");
-				%let missing_data_stmnt=&missing_data_stmnt., &cur_data.;
-			%end;
+                %dbg(nm: &nm.);
+
+                %let __data=&__data. &var.;
+                %let data_stmnt=&data_stmnt., %str(%")&var.%str(%");
+                %let missing_data_stmnt=&missing_data_stmnt., &cur_data.;
+            %end;
         %end;
     %end;
 
@@ -251,10 +249,10 @@
     %dbg(HJOIN - in: &in.);
     %dbg(HJOIN - out: &out.);
     %dbg(HJOIN - map: &map.);
-	%dbg(HJOIN - key: &key.);
-	%dbg(HJOIN - __keys: &__keys.);
+    %dbg(HJOIN - key: &key.);
+    %dbg(HJOIN - __keys: &__keys.);
     %dbg(HJOIN - key_stmnt: &key_stmnt.);
-	%dbg(HJOIN - __data: &__data.);
+    %dbg(HJOIN - __data: &__data.);
     %dbg(HJOIN - data: &data_stmnt.);
     %dbg(HJOIN - filter: &filter.);
     %dbg(HJOIN - default_missing: &default_missing.);
@@ -269,7 +267,7 @@
         set &in.;
         rc=h.find();
         %handle_defaults(rc, filter);
-	run;
+    run;
 
 %mend hjoin;
 
@@ -292,7 +290,7 @@
     %dbg(HJOIN - Inside declare_hash_object macro);
     /* Declare the hash object */
     dcl hash h(dataset: "&map.", multidata: "yes");
-	
+
     /* KEY */
     %dbg(HJOIN - Defining key to be [&key_stmnt.]);
     h.defineKey(&key_stmnt.);
@@ -353,10 +351,74 @@
     %end;
 %mend handle_defaults;
 
+%macro parseVarList(varlist=, outnum=, outchar=, outchlen=);
+    /**
+     * Parses a space‐delimited list of variable definitions.
+     *
+     * Numeric variables are specified simply by name (e.g., num1 num2).
+     * Character variables are specified with a pipe and a length (e.g., char1|3 char2|10).
+     *
+     * Parameters:
+     *   varlist   - The input string (e.g., "num1 num2 char1|3 char2|10")
+     *   outnum    - Name of the macro variable (global) to hold numeric variable names.
+     *   outchar   - Name of the macro variable (global) to hold character variable names.
+     *   outchlen  - Name of the macro variable (global) to hold the character lengths.
+     *
+     * After execution, the global macro variables specified by outnum, outchar, and outchlen
+     * will contain space-separated lists of the corresponding values.
+     *
+     * Example:
+     *   %parseVarList(varlist=num1 num2 char1|3 char2|10,
+     *                 outnum=NUM_VARS,
+     *                 outchar=CHAR_VARS,
+     *                 outchlen=CHAR_LENS);
+     *
+     *   %put NUM_VARS = &NUM_VARS;
+     *   %put CHAR_VARS = &CHAR_VARS;
+     *   %put CHAR_LENS = &CHAR_LENS;
+     */
+    %local i token varName varLen count;
+    %let nVars=;
+    %let cVars=;
+    %let cLens=;
 
+    /* Count the number of tokens in the input string */
+    %let count=%sysfunc(countw(&varlist, %str( )));
+
+    %do i=1 %to &count;
+        %let token=%qscan(&varlist, &i, %str( ));
+        /* Check if token contains a pipe character */
+        %if %index(&token,|) %then %do;
+            %let varName=%qscan(&token, 1, |);
+            %let varLen=%qscan(&token, 2, |);
+            %let cVars=&cVars &varName;
+            %let cLens=&cLens &varLen;
+        %end;
+        %else %do;
+            %let nVars=&nVars &token;
+        %end;
+    %end;
+
+    /* Create global macro variables with the cleaned (compacted) lists */
+    %global &outnum &outchar &outchlen;
+    %let &outnum=%sysfunc(compbl(&nVars));
+    %let &outchar=%sysfunc(compbl(&cVars));
+    %let &outchlen=%sysfunc(compbl(&cLens));
+%mend parseVarList;
+
+/*--- Test the macro ---*/
+
+/* %parseVarList(varlist=num1 num2 char1|3 char2|10,
+outnum=NUM_VARS,
+outchar=CHAR_VARS,
+outchlen=CHAR_LENS);
+
+%put NUM_VARS = &NUM_VARS;
+%put CHAR_VARS = &CHAR_VARS;
+%put CHAR_LENS = &CHAR_LENS; */
 data test;
-input sb_policy_key b c d $ e;
-datalines;
+    input sb_policy_key b c d $ e;
+    datalines;
 1 10 100 a 1000
 100 10 100 b 1000
 1000 10 100 c 1000
@@ -364,4 +426,5 @@ datalines;
 25000 10 100 e 1000
 ;
 
-%hjoin(in=test, out=test_out, map=decfile.policy_lookup, key=sb_policy_key, data=policy_numb policy_sym|3);
+    %hjoin(in=test, out=test_out, map=decfile.policy_lookup, key=sb_policy_key,
+        data=policy_numb policy_sym|3);
