@@ -1,0 +1,6 @@
+.venv
+.ruff_cache
+*.npy
+large_numbers.txt
+*/str-to-int-rs/target
+debug
