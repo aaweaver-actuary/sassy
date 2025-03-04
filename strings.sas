@@ -6,23 +6,15 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
 
     /* Define the functions in a function library, after checking that it doesn't already exist inside the sbfuncs.fn dataset */
     data check_lib;
-        set sb_funcs.fns( 
-            keep=type subtype _key_ 
-            where=( 
-                type="Header"
-                and subtype="Function" 
-            )
-        );
+        set sb_funcs.fns( keep=type subtype _key_ where=( type="Header" and
+            subtype="Function" ) );
 
         drop type subtype;
     run;
 
     proc sql noprint;
-        select _key_ 
-            into :func_exists 
-            separated by ' ' 
-        from check_lib 
-        where _key_="&func_name.";
+        select _key_ into :func_exists separated by ' ' from check_lib where
+            _key_="&func_name.";
     quit;
 
     %if %length(&func_exists) > 0 %then %do;
@@ -33,8 +25,7 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
         %let func_exists=0;
     %end;
 
-    &func_exists.
-
+    &func_exists. 
 %mend __does_str_func_exist;
 
 %macro define_str_funcs;
@@ -72,7 +63,7 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
         end;
         return (result);
         endsub;
-    
+
         /* Function: index */
         /* Returns the position of a substring within a string. */
         /*  */
@@ -392,13 +383,18 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
         endsub;
     run;
 
+
 %mend define_str_funcs;
 
 /*%define_str_funcs;*/
 /**/
 /*options cmplib=(sb_funcs.fn);*/
 
-%macro str__index(str, substr);
+/* Returns the position of a substring within a string, or -1 if the substring is not found */
+%macro str__index(
+    str /* String to search */
+    , substr /* Substring to search for */
+);
     %let out=%sysfunc(find(&str, &substr));
 
     %if &out <= 0 %then %do;
@@ -406,105 +402,178 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
     %end;
 
     &out. 
-%mend;
+%mend str__index;
 
-%macro str__replace(str, substr, replacement);
+/* Replaces all occurrences of a substring within a string */
+%macro str__replace(
+    str /* String to search */
+    , substr /* Substring to search for */
+    , replacement /* String to replace the substring with */
+);
     %let out=%sysfunc(tranwrd(&str, &substr, &replacement));
-    &out.
+    &out. 
 %mend str__replace;
 
-%macro str__trim(str);
+/* Removes all leading and trailing spaces from a string */
+%macro str__trim(
+    str /* String to trim */
+);
     %let out=%sysfunc(strip(&str));
     &out. 
 %mend str__trim;
 
-%macro str__upper(str);
+%macro str__upper(
+    str /* String to convert */
+);
     %let out=%sysfunc(upcase(&str));
     &out. 
 %mend str__upper;
 
 /* Returns the lowercase version of a string */
-%macro str__lower(str);
+%macro str__lower(
+    str /* String to convert */
+);
     %let out=%sysfunc(lowcase(&str));
     &out. 
 %mend str__lower;
 
 /* Returns the number of characters in a string */
-%macro str__len( s /* String to take the length of */ );
-    %let out=%length(&s.);
+%macro str__len( 
+    str /* String to take the length of */ 
+);
+    %let out=%length(&str.);
     &out. 
 %mend str__len;
 
 /* Alias for str__len */
-%macro str__length( s /* String to take the length of */ );
-    %let out=%str__len(&s.);
-    &out.
+%macro str__length(     
+    str /* String to take the length of */ 
+);
+    %let out=%str__len(&str.);
+    &out. 
 %mend str__length;
 
 /* Returns 1 if a string contains a substring, 0 otherwise */
-%macro str__contains(str, substr);
-    %let out=%sysfunc(str__contains(&str, &substr));
-    &out.
+%macro str__contains(   
+    str /* String to search */
+    , substr /* Substring to search for */
+);
+    %if %str__index(&str., &substr.) > 0 %then %do;
+        %let out=1;
+    %end;
+    %else %let out=0;
+    &out. 
 %mend str__contains;
 
 /* Return the same string, split by a delimiter */
 %macro str__split( 
-    s /* String to split */,
-    delim=' ' /* Delimiter to split the string on. Default is a space */ 
+    str /* String to split */
+    , delim=' ' /* Delimiter to split the string on. Default is a space */
 );
     %local i n out;
-    %let n=%str__len(&s, &delim);
+    %let n=%str__len(&str., &delim.);
     %do i=1 %to &n;
-        %let out=%str__join(&out, %scan(&s, &i, &delim));
+        %let out=%str__join(&out., %scan(&str., &i., &delim.));
     %end;
 
     &out. 
 %mend str__split;
 
+/* Returns a string sliced from the start to the end */
+%macro str__slice( 
+    str /* String to slice */
+    , start /* Start index */
+    , end /* End index */
+);
+    %let n_chars=%eval(&end. - &start. + 1);
+    %let out=%substr(&str., &start., &n_chars.);
+    &out.
+%mend str__slice;
+
 /* Returns 1 if a string starts with a substring, 0 otherwise */
-%macro str__startswith( s /* String to check */, substr
-    /* Substring to check for */ );
-    %let out=%sysfunc(str__startswith(&s, &substr));
+%macro str__startswith( 
+    s /* String to check */
+    , substr /* Substring to check for */ 
+);
+
+    %let slice=%str__slice(&s., 1, %str__len(&substr.));
+    %if &slice. = &substr. %then %do;
+        %let out=1;
+    %end;
+    %else %do;
+        %let out=0;
+    %end;
     &out. 
 %mend str__startswith;
 
 /* Returns 1 if a string ends with a substring, 0 otherwise */
-%macro str__endswith( s /* String to check */, substr
-    /* Substring to check for */ );
-    %let out=%sysfunc(str__endswith(&s, &substr));
+%macro str__endswith( 
+    str /* String to check */
+    , substr /* Substring to check for */ 
+);
+    %let len=%str__len(&str.);
+    %let substr_len=%str__len(&substr.);
+    %let start_pos=%eval(&len. - &substr_len. + 1);
+    %let slice=%str__slice(&str., &start_pos., &len.);
+    %if &slice. = &substr. %then %do;
+        %let out=1;
+    %end;
+    %else %do;
+        %let out=0;
+    %end;
     &out. 
 %mend str__endswith;
 
 /* Joins two strings into a single string, with a delimiter in between */
-%macro str__join( 
+%macro str__join2( 
     s1 /* First string */
     , s2 /* Second string */
-    ,delim=' ' /* Delimiter to join the strings with. Default is a space */ 
+    ,delim /* Delimiter to join the strings with. Default is a space */ 
 );
+    %if %length(&delim.) = 0 %then %do;
+        %let delim=%str( );
+    %end;
+
+
     %let out=%sysfunc(catx(&delim, &s1, &s2));
     &out. 
-%mend str__join;
+%mend str__join2;
 
 /* Reverses a string */
-%macro str__reverse( s /* String to reverse */ );
-    %let out=%sysfunc(str__reverse(&s));
+%macro str__reverse( 
+    str /* String to reverse */
+);
+    %let len=%str__len(&str.);
+    %let out=;
+    %do i=&len. %to 1 %by -1;
+        %let out=%sysfunc(cat(&out, %substr(&str., &i, 1)));
+    %end;
+
     &out. 
 %mend str__reverse;
 
 /* Finds the first occurrence of a substring within a string */
-%macro str__find( s /* String to search */, substr
-    /* Substring to search for */ );
-    %let out=%sysfunc(str__find(&s, &substr));
+%macro str__find( 
+    str /* String to search */
+    , substr /* Substring to search for */
+);
+    %let out=%str__index(&str., &substr.);
     &out. 
 %mend str__find;
 
-/* Formats a string using a format string */
-%macro str__format( s
-    /* String to format, containing one or more placeholders */, args
-    /* Arguments to replace the placeholders with, separated by spaces */
-    );
+/* Formats a string using a format string, with placeholders given by ?s */
+%macro str__format( 
+    str /* String to format, containing one or more placeholders given by ?s */
+    , args /* Arguments to replace the placeholders with, separated by spaces */ 
+);
 
-    %let out=%sysfunc(str__format(&s, &args));
+    %local i n out;
+    %let n=%sysfunc(countw(&args.));
+    %let out=&str.;
+    %do i=1 %to &n;
+        %let out=%sysfunc(tranwrd(&out., cats('?s', &i.), %scan(&args., &i.)));
+    %end;
+
     &out. 
 %mend str__format;
 
@@ -512,11 +581,74 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
     %sbmod(assert);
 
     %test_suite(Unit tests for string.sas);
+        %let strIndex1=%str__index(andy is a cool guy, cool);
+        %let strFind1=%str__find(andy is a cool guy, cool);
+        %assertEqual(&strIndex1., 11);
+        %assertEqual(&strFind1., 11);
+
+        %let strIndex2=%str__index(andy is a cool guy, awesome);
+        %let strFind2=%str__find(andy is a cool guy, awesome);
+        %assertEqual(&strIndex2., -1);
+        %assertEqual(&strFind2., -1);
+
+        %let strReplace1=%str__replace(andy is a cool guy, cool, awesome);
+        %assertEqual(&strReplace1., andy is a awesome guy);
+
+        %let strReplaceNotFound=%str__replace(andy is a cool guy, awesome, cool);
+        %assertEqual(&strReplaceNotFound., andy is a cool guy);
+
         %let strLen1=%str__len(andy);
+        %let strLen1a=%str__length(andy);
         %assertEqual(&strLen1., 4);
-        
+        %assertEqual(&strLen1a., 4);
+
         %let strLen2=%str__len(andy weaver);
+        %let strLen2a=%str__length(andy weaver);
         %assertEqual(&strLen2., 11);
+        %assertEqual(&strLen2a., 11);
+
+        %let strTrim1=%str__trim( andy is a cool guy );
+        %assertEqual(&strTrim1., andy is a cool guy);
+
+        %let strUpper1=%str__upper(andy is a cool guy);
+        %assertEqual(&strUpper1., ANDY IS A COOL GUY);
+
+        %let strLower1=%str__lower(ANDY IS A COOL GUY);
+        %assertEqual(&strLower1., andy is a cool guy);
+
+        %let strLower2=%str__lower(Andy is a Cool Guy);
+        %assertEqual(&strLower2., andy is a cool guy);
+
+        %let strContains1=%str__contains(andy is a cool guy, cool);
+        %assertTrue(&strContains1., [andy is a cool guy] does actually contain [cool]);
+
+        %let strContains2=%str__contains(andy is a cool guy, awesome);
+        %assertFalse(&strContains2., [andy is a cool guy] does not contain [awesome]);
+
+        %let strSlice1=%str__slice(andy is a cool guy, 1, 4);
+        %assertEqual(&strSlice1., andy);
+
+        %let strSlice2=%str__slice(andy is a cool guy, 6, 7);
+        %assertEqual(&strSlice2., is);
+
+        %let strSlice3=%str__slice(andy is a cool guy, 11, 14);
+        %assertEqual(&strSlice3., cool);
+
+        %assertTrue(%str__startswith(andy is a cool guy, andy), [andy is a cool guy] does start with [andy]);
+        %assertFalse(%str__startswith(andy is a cool guy, cool), [andy is a cool guy] does not start with [cool]);
+
+        %assertTrue(%str__endswith(andy is a cool guy, guy), [andy is a cool guy] does end with [guy]);
+        %assertFalse(%str__endswith(andy is a cool guy, cool), [andy is a cool guy] does not end with [cool]);
+
+        %let strJoin1=%str__join2(andy, is);
+        %assertEqual(&strJoin1., andy is);
+
+        %let strJoin2=%str__join2(andy, is, |);
+        %assertEqual("&strJoin2.", "andy|is");
+
+        %let strFormat1=%str__format(Hello, ?s! Today is ?s. It is ?s degrees outside., Andy Monday 75);
+        %assertEqual(&strFormat1., Hello, Andy! Today is Monday. It is 75 degrees outside.);
+
     %test_summary;
 %mend test_strings;
 
