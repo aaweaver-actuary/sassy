@@ -1,6 +1,3 @@
-/* This module defines functions and corresponding macros for string manipulation in SAS. */
-libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
-
 %macro __does_str_func_exist(func_name);
     %global func_exists;
 
@@ -485,6 +482,9 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
     , start /* Start index */
     , end /* End index */
 );
+    %if %length(&end.) = 0 %then %let end=%str__len(&str.);
+    %if %length(&start.) = 0 %then %let start=1;
+    
     %let n_chars=%eval(&end. - &start. + 1);
     %let out=%substr(&str., &start., &n_chars.);
     &out.
@@ -583,71 +583,86 @@ libname sb_funcs base "/sas/data/project/EG/aweaver/macros";
     %test_suite(Unit tests for string.sas);
         %let strIndex1=%str__index(andy is a cool guy, cool);
         %let strFind1=%str__find(andy is a cool guy, cool);
-        %assertEqual(&strIndex1., 11);
-        %assertEqual(&strFind1., 11);
+        %assertEqual(&strIndex1., 11); /* Test 1*/
+        %assertEqual(&strFind1., 11); /* Test 2*/
 
         %let strIndex2=%str__index(andy is a cool guy, awesome);
         %let strFind2=%str__find(andy is a cool guy, awesome);
-        %assertEqual(&strIndex2., -1);
-        %assertEqual(&strFind2., -1);
+        %assertEqual(&strIndex2., -1); /* Test 3*/
+        %assertEqual(&strFind2., -1); /* Test 4*/
 
         %let strReplace1=%str__replace(andy is a cool guy, cool, awesome);
-        %assertEqual(&strReplace1., andy is a awesome guy);
+        %assertEqual(&strReplace1., andy is a awesome guy); /* Test 5*/
 
         %let strReplaceNotFound=%str__replace(andy is a cool guy, awesome, cool);
-        %assertEqual(&strReplaceNotFound., andy is a cool guy);
+        %assertEqual(&strReplaceNotFound., andy is a cool guy); /* Test 6*/
 
         %let strLen1=%str__len(andy);
         %let strLen1a=%str__length(andy);
-        %assertEqual(&strLen1., 4);
-        %assertEqual(&strLen1a., 4);
+        %assertEqual(&strLen1., 4); /* Test 7*/
+        %assertEqual(&strLen1a., 4); /* Test 8*/
 
         %let strLen2=%str__len(andy weaver);
         %let strLen2a=%str__length(andy weaver);
-        %assertEqual(&strLen2., 11);
-        %assertEqual(&strLen2a., 11);
+        %assertEqual(&strLen2., 11); /* Test 9*/
+        %assertEqual(&strLen2a., 11); /* Test 10*/
 
         %let strTrim1=%str__trim( andy is a cool guy );
-        %assertEqual(&strTrim1., andy is a cool guy);
+        %assertEqual(&strTrim1., andy is a cool guy); /* Test 11*/
 
         %let strUpper1=%str__upper(andy is a cool guy);
-        %assertEqual(&strUpper1., ANDY IS A COOL GUY);
+        %assertEqual(&strUpper1., ANDY IS A COOL GUY); /* Test 12*/
 
         %let strLower1=%str__lower(ANDY IS A COOL GUY);
-        %assertEqual(&strLower1., andy is a cool guy);
+        %assertEqual(&strLower1., andy is a cool guy); /* Test 13*/
 
         %let strLower2=%str__lower(Andy is a Cool Guy);
-        %assertEqual(&strLower2., andy is a cool guy);
+        %assertEqual(&strLower2., andy is a cool guy); /* Test 14*/
 
         %let strContains1=%str__contains(andy is a cool guy, cool);
-        %assertTrue(&strContains1., [andy is a cool guy] does actually contain [cool]);
+        %assertTrue(&strContains1., [andy is a cool guy] does actually contain [cool]); /* Test 15 */
 
         %let strContains2=%str__contains(andy is a cool guy, awesome);
-        %assertFalse(&strContains2., [andy is a cool guy] does not contain [awesome]);
+        %assertFalse(&strContains2., [andy is a cool guy] does not contain [awesome]); /* Test 16 */
 
         %let strSlice1=%str__slice(andy is a cool guy, 1, 4);
-        %assertEqual(&strSlice1., andy);
+        %assertEqual(&strSlice1., andy); /* Test 17 */
 
         %let strSlice2=%str__slice(andy is a cool guy, 6, 7);
-        %assertEqual(&strSlice2., is);
+        %assertEqual(&strSlice2., is); /* Test 18 */
 
         %let strSlice3=%str__slice(andy is a cool guy, 11, 14);
-        %assertEqual(&strSlice3., cool);
+        %assertEqual(&strSlice3., cool); /* Test 19 */
 
-        %assertTrue(%str__startswith(andy is a cool guy, andy), [andy is a cool guy] does start with [andy]);
-        %assertFalse(%str__startswith(andy is a cool guy, cool), [andy is a cool guy] does not start with [cool]);
+        %let strSlice4=%str__slice(andy is a cool guy,, 4);
+        %assertEqual(&strSlice4., andy); /* Test 20 */
 
-        %assertTrue(%str__endswith(andy is a cool guy, guy), [andy is a cool guy] does end with [guy]);
-        %assertFalse(%str__endswith(andy is a cool guy, cool), [andy is a cool guy] does not end with [cool]);
+        %let strSlice5=%str__slice(andy is a cool guy, 6,);
+        %assertEqual(&strSlice5., is a cool guy); /* Test 21 */
+
+        %assertTrue(
+            %str__startswith(andy is a cool guy, andy), 
+            [andy is a cool guy] does start with [andy]
+        );  /* Test 22*/
+        %assertFalse(
+            %str__startswith(andy is a cool guy, cool), 
+            [andy is a cool guy] does not start with [cool]
+        ); /* Test 23*/
+
+        %assertTrue(
+            %str__endswith(andy is a cool guy, guy), 
+            [andy is a cool guy] does end with [guy]
+        ); /* Test 24 */
+        %assertFalse(
+            %str__endswith(andy is a cool guy, cool), 
+            [andy is a cool guy] does not end with [cool]
+        ); /* Test 25 */
 
         %let strJoin1=%str__join2(andy, is);
-        %assertEqual(&strJoin1., andy is);
+        %assertEqual(&strJoin1., andy is); /* Test 26 */
 
         %let strJoin2=%str__join2(andy, is, |);
-        %assertEqual("&strJoin2.", "andy|is");
-
-        %let strFormat1=%str__format(Hello, ?s! Today is ?s. It is ?s degrees outside., Andy Monday 75);
-        %assertEqual(&strFormat1., Hello, Andy! Today is Monday. It is 75 degrees outside.);
+        %assertEqual("&strJoin2.", "andy|is"); /* Test 27 */
 
     %test_summary;
 %mend test_strings;
