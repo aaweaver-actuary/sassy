@@ -15,6 +15,16 @@
 	related & grouped tests (i.e. the next test case separated by a %test_case macro).
 */
 
+%macro test_case(title);
+	%global currentTestCaseName isCurrentlyInTestCase testCaseCount testCaseFailures testCaseErrors;
+	%let currentTestCaseName=&title.;
+	%put======================>> Running test case: [&currentTestCaseName.];
+	%let isCurrentlyInTestCase=1;
+	%let testCaseCount=0;
+	%let testCaseFailures=0;
+	%let testCaseErrors=0;
+%mend test_case;
+
 
 %put======================>> Loading assert.sas;
 
@@ -74,11 +84,14 @@
 	test passes to identify and describe the test.
 	 */
 	%itit_globals;
+	%local result;
+	%let result=0;
 
 	%let testPass=%eval(&testCount - &testFailures);
 	%let testCount=%eval(&testCount + 1);
 
 	%if %eval(&condition)=1 %then %do;
+		%let result=1;
 		%let testPass=%eval(&testPass + 1);
 		%put &logPASS. - &testPass.|&testFailures.|&testErrors. - &message;
 	%end;
@@ -87,6 +100,7 @@
 		%put &logFAIL. - &testPass.|&testFailures.|&testErrors. - &message;
 	%end;
 	%else %do;
+		%let result=-1;
 		%let testErrors=%eval(&testErrors + 1);
 		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &message.;
 		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
@@ -94,6 +108,12 @@
 		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
 			must evaluate to either 0 or 1;
 	%end;
+
+	%if &isCurrentlyInTestCase.=1 %then %do;
+		%let testCaseCount=%eval(&testCaseCount + 1);
+		%if %eval(&result=0) %then %let testCaseFailures=%eval(&testCaseFailures + 1);
+		%else %if %eval(&result=-1) %then %let testCaseErrors=%eval(&testCaseErrors + 1);
+
 %mend;
 
 %macro assertFalse(condition, message);
@@ -151,36 +171,63 @@ run;
 options cmplib=work.fn;
 
 %macro test_suite(name);
-	%global testSuite;
+	%global testSuite isCurrentlyInTestCase;
+	%let isCurrentlyInTestCase=0;
 	%let testSuite=&name.;
 	%put======================>> Running unit tests for &name.;
 	%reset_test_counts;
 %mend test_suite;
 
 %macro test_summary;
-	%put======================>> Test Summary;
-	%put ;
-	%put |----------------------------------|;
-	%put | &testSuite;
-	%put |----------------------------------|;
-	%put |----------------------------------|;
-	%put | Test Count: | &testCount;
-	%put |----------------------------------|;
-	%put | Test Failures: | &testFailures;
-	%put |----------------------------------|;
-	%put | Test Errors: | &testErrors;
-	%put |----------------------------------|;
-	%put |----------------------------------|;
-	%put ;
-	%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests
-		passed;
-	%else %put &logFAIL. - Some tests failed;
+	%if &isCurrentlyInTestCase.=1 %then %do;
 
-	%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures -
-		&testErrors, &testFailures, &testErrors);
+		%put======================>> Test Case Summary;
+		%put ;
+		%put |----------------------------------|;
+		%put | &currentTestCaseName;
+		%put |----------------------------------|;
+		%put |----------------------------------|;
+		%put | Test Count: | &testCaseCount;
+		%put |----------------------------------|;
+		%put | Test Failures: | &testCaseFailures;
+		%put |----------------------------------|;
+		%put | Test Errors: | &testCaseErrors;
+		%put |----------------------------------|;
+		%put |----------------------------------|;
+		%put ;
 
-	%put======================>> Test Summary [DONE];
+		%if &testCaseFailures=0 and &testCaseErrors=0 %then %put &logPASS. - All tests for [&currentTestCaseName.] passed;
+		%else %put &logFAIL. - Some tests for [&currentTestCaseName.] failed;
 
+		%put======================>> Test Case Summary [DONE];
+
+		%let isCurrentlyInTestCase=0;
+	%end;
+	%else %do;
+		%put======================>> Test Summary;
+		%put ;
+		%put |----------------------------------|;
+		%put | &testSuite;
+		%put |----------------------------------|;
+		%put |----------------------------------|;
+		%put | Test Count: | &testCount;
+		%put |----------------------------------|;
+		%put | Test Failures: | &testFailures;
+		%put |----------------------------------|;
+		%put | Test Errors: | &testErrors;
+		%put |----------------------------------|;
+		%put |----------------------------------|;
+		%put ;
+		%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests
+			passed;
+		%else %put &logFAIL. - Some tests failed;
+
+		%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures -
+			&testErrors, &testFailures, &testErrors);
+
+		%put======================>> Test Summary [DONE];
+
+	%end;
 	%put======================>> Running unit tests for &testSuite [DONE];
 %mend test_summary;
 
