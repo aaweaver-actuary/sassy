@@ -1,3 +1,21 @@
+/* 
+	TODO: 
+	This could really use some concept of a "test case" or a subgrouping of tests
+	that does not reset all the global counting variables but does allow for 
+	meaningful separation between tests for different parts of the codebase.
+	For example, if I have a module that has a bunch of functions, I might want
+	to group all the tests for those functions together, but I don't want to reset
+	the test counts between each test group.
+
+	One way to do this would be to have a "test case" macro that sets a flag
+	indicating that we are in a test case, and then have the test summary macro
+	check that flag and only reset the counts if the flag is not set. This would
+	allow for a test case to group a bunch of tests together and then have a summary
+	of the test case at the end of the group before moving on to the next set of 
+	related & grouped tests (i.e. the next test case separated by a %test_case macro).
+*/
+
+
 %put======================>> Loading assert.sas;
 
 %macro _log_styles;
