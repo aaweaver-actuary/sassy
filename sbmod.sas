@@ -215,8 +215,6 @@
         %assertEqual(&cur_sbmod_aliases., sb aw);
         %assertEqual(&cur_sbmod_default_alias., sb);
         %assertEqual(&cur_sbmod_imports., sb::sbmod sb::assert sb::shell);
-
-
         
     %test_summary;
 
