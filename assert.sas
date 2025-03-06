@@ -1,32 +1,8 @@
-/* 
-	TODO: 
-	This could really use some concept of a "test case" or a subgrouping of tests
-	that does not reset all the global counting variables but does allow for 
-	meaningful separation between tests for different parts of the codebase.
-	For example, if I have a module that has a bunch of functions, I might want
-	to group all the tests for those functions together, but I don't want to reset
-	the test counts between each test group.
 
-	One way to do this would be to have a "test case" macro that sets a flag
-	indicating that we are in a test case, and then have the test summary macro
-	check that flag and only reset the counts if the flag is not set. This would
-	allow for a test case to group a bunch of tests together and then have a summary
-	of the test case at the end of the group before moving on to the next set of 
-	related & grouped tests (i.e. the next test case separated by a %test_case macro).
-*/
-
-%macro test_case(title);
-	%global currentTestCaseName isCurrentlyInTestCase testCaseCount testCaseFailures testCaseErrors;
-	%let currentTestCaseName=&title.;
-	%put======================>> Running test case: [&currentTestCaseName.];
-	%let isCurrentlyInTestCase=1;
-	%let testCaseCount=0;
-	%let testCaseFailures=0;
-	%let testCaseErrors=0;
-%mend test_case;
+%sbmod(sbfuncs);
 
 
-%put======================>> Loading assert.sas;
+
 
 %macro _log_styles;
 	%global logPASS logFAIL logERROR;
@@ -41,7 +17,18 @@
 	%if %symexist(%unquote(%str(&symbol.)))=0 %then %let out=1;
 	%else %if "%sysfunc(strip(%unquote(%str(&symbol.))))"="" %then %let out=1;
 	%else %let out=0;
-	&out. %mend;
+	&out. 
+%mend;
+
+%macro __initAssert(verbose=0);
+	%global __PRINT_ASSERTIONS_TESTS;
+	%let __PRINT_ASSERTIONS_TESTS=&verbose.;
+
+	%if &__PRINT_ASSERTIONS_TESTS.=1 %then
+		%put======================>> Loading assert.sas;
+%mend __initAssert;
+
+%__initAssert;
 
 %macro test_symbol_dne;
 	%test_suite(Symbol DNE tests);
@@ -84,7 +71,6 @@
 	test passes to identify and describe the test.
 	 */
 	%itit_globals;
-	%local result;
 	%let result=0;
 
 	%let testPass=%eval(&testCount - &testFailures);
@@ -93,26 +79,33 @@
 	%if %eval(&condition)=1 %then %do;
 		%let result=1;
 		%let testPass=%eval(&testPass + 1);
-		%put &logPASS. - &testPass.|&testFailures.|&testErrors. - &message;
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then %do;
+			%put &logPASS. - &testPass.|&testFailures.|&testErrors. - &message;
+		%end;
 	%end;
 	%else %if %eval(&condition)=0 %then %do;
 		%let testFailures=%eval(&testFailures + 1);
-		%put &logFAIL. - &testPass.|&testFailures.|&testErrors. - &message;
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then %do;
+			%put &logFAIL. - &testPass.|&testFailures.|&testErrors. - &message;
+		%end;
 	%end;
 	%else %do;
 		%let result=-1;
 		%let testErrors=%eval(&testErrors + 1);
-		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &message.;
-		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
-			evaluates to %eval(&condition);
-		%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
-			must evaluate to either 0 or 1;
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then %do;
+			%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &message.;
+			%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
+				evaluates to %eval(&condition);
+			%put &logERROR. - &testPass.|&testFailures.|&testErrors. - &condition.
+				must evaluate to either 0 or 1;
+		%end;
 	%end;
 
 	%if &isCurrentlyInTestCase.=1 %then %do;
 		%let testCaseCount=%eval(&testCaseCount + 1);
 		%if %eval(&result=0) %then %let testCaseFailures=%eval(&testCaseFailures + 1);
 		%else %if %eval(&result=-1) %then %let testCaseErrors=%eval(&testCaseErrors + 1);
+	%end;
 
 %mend;
 
@@ -132,12 +125,14 @@
 	%assertFalse(%eval(&actual=&expected), &message.);
 %mend;
 
-/*  redo the same set of assertions but with PROC FCMP functions for
-testing inside a data step*/
-proc fcmp outlib=work.fn.assert;
+options nonotes nosource nodetails; /* Suppress warnings that these functions were previously compiled */
+
+proc fcmp outlib=sbfuncs.fn.assert;
+	/* These subroutines are otherwise identical to the macros, but
+	   are compiled	subroutines that can test data in a data step.*/
 	subroutine assertTrue(condition $, message $);
 	length cmd $ 32767;
-	cmd=strip(cats('%nrstr(%assertTrue)(', condition, ', "', message, '")'));
+		cmd=strip(cats('%nrstr(%assertTrue)(', condition, ', "', message, '")'));
 	put cmd=;
 	call execute(cmd);
 	endsub;
@@ -168,90 +163,124 @@ proc fcmp outlib=work.fn.assert;
 	endsub;
 run;
 
-options cmplib=work.fn;
+options notes source details; 
+options cmplib=sbfuncs.fn;
 
 %macro test_suite(name);
 	%global testSuite isCurrentlyInTestCase;
 	%let isCurrentlyInTestCase=0;
 	%let testSuite=&name.;
-	%put======================>> Running unit tests for &name.;
+	%if &__PRINT_ASSERTIONS_TESTS.=1 %then 
+		%put======================>> Running unit tests for &name.;
 	%reset_test_counts;
 %mend test_suite;
 
+%macro test_case(title);
+	%global currentTestCaseName isCurrentlyInTestCase testCaseCount testCaseFailures testCaseErrors;
+	%let currentTestCaseName=&title.;
+
+	%if &__PRINT_ASSERTIONS_TESTS.=1 %then 
+		%put======================>> Running test case: [&currentTestCaseName.];
+
+	%let isCurrentlyInTestCase=1;
+	%let testCaseCount=0;
+	%let testCaseFailures=0;
+	%let testCaseErrors=0;
+%mend test_case;
+
 %macro test_summary;
+
 	%if &isCurrentlyInTestCase.=1 %then %do;
 
-		%put======================>> Test Case Summary;
-		%put ;
-		%put |----------------------------------|;
-		%put | &currentTestCaseName;
-		%put |----------------------------------|;
-		%put |----------------------------------|;
-		%put | Test Count: | &testCaseCount;
-		%put |----------------------------------|;
-		%put | Test Failures: | &testCaseFailures;
-		%put |----------------------------------|;
-		%put | Test Errors: | &testCaseErrors;
-		%put |----------------------------------|;
-		%put |----------------------------------|;
-		%put ;
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then %do;
+
+			%put======================>> Test Case Summary;
+			%put ;
+			%put |----------------------------------|;
+			%put | &currentTestCaseName;
+			%put |----------------------------------|;
+			%put |----------------------------------|;
+			%put | Test Count: | &testCaseCount;
+			%put |----------------------------------|;
+			%put | Test Failures: | &testCaseFailures;
+			%put |----------------------------------|;
+			%put | Test Errors: | &testCaseErrors;
+			%put |----------------------------------|;
+			%put |----------------------------------|;
+			%put ;
+
+		%end;
 
 		%if &testCaseFailures=0 and &testCaseErrors=0 %then %put &logPASS. - All tests for [&currentTestCaseName.] passed;
 		%else %put &logFAIL. - Some tests for [&currentTestCaseName.] failed;
 
-		%put======================>> Test Case Summary [DONE];
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then 
+			%put======================>> Test Case Summary [DONE];
 
 		%let isCurrentlyInTestCase=0;
 	%end;
 	%else %do;
-		%put======================>> Test Summary;
-		%put ;
-		%put |----------------------------------|;
-		%put | &testSuite;
-		%put |----------------------------------|;
-		%put |----------------------------------|;
-		%put | Test Count: | &testCount;
-		%put |----------------------------------|;
-		%put | Test Failures: | &testFailures;
-		%put |----------------------------------|;
-		%put | Test Errors: | &testErrors;
-		%put |----------------------------------|;
-		%put |----------------------------------|;
-		%put ;
+
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then %do;
+			%put======================>> Test Summary;
+			%put ;
+			%put |----------------------------------|;
+			%put | &testSuite;
+			%put |----------------------------------|;
+			%put |----------------------------------|;
+			%put | Test Count: | &testCount;
+			%put |----------------------------------|;
+			%put | Test Failures: | &testFailures;
+			%put |----------------------------------|;
+			%put | Test Errors: | &testErrors;
+			%put |----------------------------------|;
+			%put |----------------------------------|;
+			%put ;
+		%end;	
+
 		%if &testFailures=0 and &testErrors=0 %then %put &logPASS. - All tests
 			passed;
 		%else %put &logFAIL. - Some tests failed;
 
-		%insert_test_summary(&testSuite, &testCount, &testCount - &testFailures -
-			&testErrors, &testFailures, &testErrors);
 
-		%put======================>> Test Summary [DONE];
+		%if &__PRINT_ASSERTIONS_TESTS.=1 %then 	
+			%put======================>> Test Summary [DONE];
 
 	%end;
-	%put======================>> Running unit tests for &testSuite [DONE];
+	%if &__PRINT_ASSERTIONS_TESTS.=1 %then 
+		%put======================>> Running unit tests for &testSuite [DONE];
 %mend test_summary;
 
 %put======================>> Loading assert.sas [DONE];
 
 /* Test these assertion macros */
-%macro test_assertions;
+%macro test_assertions(verbose=0);
+	%global __PRINT_ASSERTIONS_TESTS;
+	%if &verbose.=1 %then %let __PRINT_ASSERTIONS_TESTS=1;
+	%else %let __PRINT_ASSERTIONS_TESTS=0;
+
 	%test_suite(Testing assert);
 
-	%assertTrue(1, 1 is true);
-	%assertFalse(0, 0 is false);
-	%assertEqual(1, 1);
-	%assertNotEqual(1, 0);
+		%test_case(Testing macro versions of assertions);
+			%assertTrue(1, 1 is true);
+			%assertFalse(0, 0 is false);
+			%assertEqual(1, 1);
+			%assertNotEqual(1, 0);
 
-	%assertTrue(%symbol_dne(asdafasdf), 'asdafasdf' was not previously defined);
+			%assertTrue(%symbol_dne(asdafasdf), 'asdafasdf' was not previously defined);
 
-	data _null_;
-		length result $ 32767;
+		%test_summary;
 
-		call assertTrue('1', "1 is true DATA STEP ASSERTIONS");
-		call assertFalse('0', "0 is false");
-		call assertEqual('1', '1');
-		call assertNotEqual('1', '0');
-	run;
+		%test_case(Testing DATA STEP versions of assertions);
+			data _null_;
+				length result $ 32767.;
+
+				call assertTrue('1', "1 is true DATA STEP ASSERTIONS");
+				call assertFalse('0', "0 is false");
+				call assertEqual('1', '1');
+				call assertNotEqual('1', '0');
+			run;
+		%test_summary;
 
 	%test_summary;
 %mend test_assertions;
